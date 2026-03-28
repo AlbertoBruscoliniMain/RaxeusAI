@@ -13,6 +13,13 @@ try:
 except ImportError:
     _GOOGLE_OK = False
 
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    _REQUESTS_OK = True
+except ImportError:
+    _REQUESTS_OK = False
+
 
 def web_search(query: str) -> str:
     if not _DDGS_OK:
@@ -67,12 +74,29 @@ def google_search(query: str) -> str:
     if not _GOOGLE_OK:
         return "Errore: libreria googlesearch-python non installata."
     try:
-        results = list(gsearch(query, num_results=4, lang="it"))
+        results = list(gsearch(query, num_results=5, advanced=True, lang="it"))
         if not results:
             return "Nessun risultato trovato."
-        return "\n".join(f"{i+1}. {url}" for i, url in enumerate(results))
+        return "\n\n".join(
+            f"**{r.title}**\n{r.description}\n{r.url}" for r in results
+        )
     except Exception as e:
         return f"Errore ricerca Google: {e}"
+
+
+def fetch_url(url: str) -> str:
+    if not _REQUESTS_OK:
+        return "Errore: librerie requests/beautifulsoup4 non installate."
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=8)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        text = " ".join(soup.get_text(separator=" ").split())
+        return text[:3000]
+    except Exception as e:
+        return f"Errore nel fetch della pagina: {e}"
 
 
 def get_datetime() -> str:
@@ -80,8 +104,9 @@ def get_datetime() -> str:
 
 
 TOOLS = {
-    "web_search": web_search,
     "google_search": google_search,
+    "web_search": web_search,
+    "fetch_url": fetch_url,
     "read_file": read_file,
     "write_file": write_file,
     "run_python": run_python,
@@ -100,6 +125,20 @@ TOOL_SCHEMAS = [
                     "query": {"type": "string", "description": "La query di ricerca"}
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_url",
+            "description": "Legge il contenuto testuale di una pagina web dato il suo URL. Usalo dopo google_search per leggere il contenuto delle pagine trovate e ottenere informazioni aggiornate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "URL della pagina da leggere"}
+                },
+                "required": ["url"],
             },
         },
     },

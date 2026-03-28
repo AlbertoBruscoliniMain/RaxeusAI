@@ -1,7 +1,7 @@
 # Teoria — Come funziona un assistente AI
 
 > Concetti teorici dietro il progetto Raxeus.
-> Per la documentazione del codice vedi [CODE.md](CODE.md).
+> Per la documentazione del codice vedi [CODE.md](CODE.md). Per bug e fix vedi [BUGS.md](BUGS.md).
 
 ---
 

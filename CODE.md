@@ -1,7 +1,7 @@
 # Codice — Documentazione tecnica
 
 > Documentazione di ogni file del progetto Raxeus.
-> Per i concetti teorici vedi [THEORY.md](THEORY.md).
+> Per i concetti teorici vedi [THEORY.md](THEORY.md). Per bug e fix vedi [BUGS.md](BUGS.md).
 
 ---
 
@@ -97,7 +97,7 @@ def reset(): ...
 4. se arrivano tool_calls → accumula i chunk del tool call
 5. se tool_calls presenti:
    - memory.add_assistant_tool_calls(...)
-   - per ogni tool: esegui → stampa → memory.add_tool_result(...)
+   - per ogni tool: esegui silenziosamente → memory.add_tool_result(...)
    - torna al punto 2 (loop)
 6. se nessun tool_call → memory.add("assistant", testo) → return
 ```
@@ -111,6 +111,7 @@ def reset(): ...
 **Modifiche rispetto alla versione base:**
 - Aggiunto streaming completo della risposta
 - Aggiunto agentic loop con tool calling
+- Rimossi print di debug dei tool call (fix BUG-002)
 - `memory` è esposto a livello di modulo per permettere a `main.py` di importarlo per le sessioni
 
 ---
@@ -125,7 +126,8 @@ Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
 
 | Tool | Funzione | Descrizione |
 |---|---|---|
-| `google_search` | `google_search(query)` | **[principale]** Cerca su Google, restituisce i link dei primi 4 risultati |
+| `google_search` | `google_search(query)` | **[principale]** Cerca su Google, restituisce titolo + descrizione + URL dei primi 5 risultati |
+| `fetch_url` | `fetch_url(url)` | Legge il contenuto testuale di una pagina web (max 3000 char) |
 | `web_search` | `web_search(query)` | **[fallback]** Cerca su DuckDuckGo, restituisce titolo + snippet + URL dei primi 4 risultati |
 | `read_file` | `read_file(path)` | Legge un file dal filesystem e ne restituisce il contenuto |
 | `write_file` | `write_file(path, content)` | Scrive o sovrascrive un file |
@@ -160,7 +162,9 @@ Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione cor
 **Note:**
 - `run_python` usa il `python3` di sistema, non il venv
 - `web_search` richiede `duckduckgo-search` installato — se assente, restituisce errore senza crashare
-- `google_search` richiede `googlesearch-python` — restituisce solo URL (non snippet), utile per trovare pagine specifiche
+- `google_search` ora usa `advanced=True` — restituisce titolo, descrizione e URL (fix BUG-001)
+- `fetch_url` usa `requests` + `beautifulsoup4` per estrarre solo il testo pulito dalla pagina, rimuovendo script/stili/nav
+- Alcuni siti bloccano `fetch_url` con 403 (vedi BUG-005 in BUGS.md)
 - L'output di `run_python` è limitato a 2000 caratteri per non intasare la history
 
 ---
@@ -218,9 +222,11 @@ print()      # newline finale
 openai
 duckduckgo-search
 googlesearch-python
+requests
+beautifulsoup4
 ```
 
-**Modifiche:** aggiunte `duckduckgo-search` e `googlesearch-python` per i tool di ricerca.
+**Modifiche:** aggiunte `duckduckgo-search`, `googlesearch-python`, `requests` e `beautifulsoup4` per ricerca web e fetch pagine.
 
 ---
 
