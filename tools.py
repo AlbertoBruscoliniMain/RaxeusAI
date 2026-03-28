@@ -1,8 +1,10 @@
 import subprocess
+import sys
+import io
 from datetime import datetime
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     _DDGS_OK = True
 except ImportError:
     _DDGS_OK = False
@@ -23,10 +25,15 @@ except ImportError:
 
 def web_search(query: str) -> str:
     if not _DDGS_OK:
-        return "Errore: libreria duckduckgo-search non installata."
+        return "Errore: libreria ddgs non installata."
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=4))
+        _old_stderr = sys.stderr
+        sys.stderr = io.StringIO()
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=5))
+        finally:
+            sys.stderr = _old_stderr
         if not results:
             return "Nessun risultato trovato."
         return "\n\n".join(
@@ -72,16 +79,23 @@ def run_python(code: str) -> str:
 
 def google_search(query: str) -> str:
     if not _GOOGLE_OK:
-        return "Errore: libreria googlesearch-python non installata."
+        return web_search(query)
     try:
-        results = list(gsearch(query, num_results=5, advanced=True, lang="it"))
-        if not results:
-            return "Nessun risultato trovato."
-        return "\n\n".join(
-            f"**{r.title}**\n{r.description}\n{r.url}" for r in results
-        )
-    except Exception as e:
-        return f"Errore ricerca Google: {e}"
+        _old_stderr = sys.stderr
+        sys.stderr = io.StringIO()
+        try:
+            urls = list(gsearch(query, num_results=5, lang="it"))
+        finally:
+            sys.stderr = _old_stderr
+        if not urls:
+            return web_search(query)
+        results = []
+        for url in urls[:2]:
+            content = fetch_url(url)
+            results.append(f"[{url}]\n{content}")
+        return "\n\n---\n\n".join(results)
+    except Exception:
+        return web_search(query)
 
 
 def fetch_url(url: str) -> str:

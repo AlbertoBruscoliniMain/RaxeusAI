@@ -41,9 +41,9 @@ SYSTEM_PROMPT = f"""..."""
 
 **Modifiche applicate:**
 - `AI_NAME` cambiato da `"Jarvis"` a `"Raxeus"`
-- `SYSTEM_PROMPT` riscritto con personalità ribelle, arrogante, humor cinico e parolacce naturali
-- Aggiunta regola: niente divagazioni nelle risposte tecniche, utente nominato max una volta
-- Aggiunta regola: libero arbitrio quando si parla di sé o dell'utente
+- `SYSTEM_PROMPT` riscritto con personalità orgogliosa, pomposa, narcisista — si vanta di ogni risposta
+- Data corrente iniettata dinamicamente all'avvio via `datetime.now()` — il modello sa sempre che anno è
+- Aggiunta regola esplicita: usare i tool senza annunciarlo, mai fidarsi del training data per info recenti
 
 ---
 
@@ -126,9 +126,9 @@ Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
 
 | Tool | Funzione | Descrizione |
 |---|---|---|
-| `google_search` | `google_search(query)` | **[principale]** Cerca su Google, restituisce titolo + descrizione + URL dei primi 5 risultati |
+| `google_search` | `google_search(query)` | **[principale]** Cerca su Google + legge le prime 2 pagine con `fetch_url`. Fallback automatico su `web_search` se Google fallisce |
 | `fetch_url` | `fetch_url(url)` | Legge il contenuto testuale di una pagina web (max 3000 char) |
-| `web_search` | `web_search(query)` | **[fallback]** Cerca su DuckDuckGo, restituisce titolo + snippet + URL dei primi 4 risultati |
+| `web_search` | `web_search(query)` | **[fallback]** Cerca su DuckDuckGo via `ddgs`, restituisce titolo + snippet + URL dei primi 5 risultati |
 | `read_file` | `read_file(path)` | Legge un file dal filesystem e ne restituisce il contenuto |
 | `write_file` | `write_file(path, content)` | Scrive o sovrascrive un file |
 | `run_python` | `run_python(code)` | Esegue codice Python in subprocess, restituisce stdout/stderr (timeout 10s) |
@@ -161,8 +161,8 @@ Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione cor
 
 **Note:**
 - `run_python` usa il `python3` di sistema, non il venv
-- `web_search` richiede `duckduckgo-search` installato — se assente, restituisce errore senza crashare
-- `google_search` ora usa `advanced=True` — restituisce titolo, descrizione e URL (fix BUG-001)
+- `web_search` usa la libreria `ddgs` (rinomina di `duckduckgo-search`) — stderr soppresso via redirect `sys.stderr`
+- `google_search` legge direttamente le prime 2 pagine trovate con `fetch_url`, fallback automatico su `web_search`
 - `fetch_url` usa `requests` + `beautifulsoup4` per estrarre solo il testo pulito dalla pagina, rimuovendo script/stili/nav
 - Alcuni siti bloccano `fetch_url` con 403 (vedi BUG-005 in BUGS.md)
 - L'output di `run_python` è limitato a 2000 caratteri per non intasare la history
@@ -220,7 +220,7 @@ print()      # newline finale
 
 ```
 openai
-duckduckgo-search
+ddgs
 googlesearch-python
 requests
 beautifulsoup4

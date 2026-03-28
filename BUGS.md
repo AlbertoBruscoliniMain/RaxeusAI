@@ -10,16 +10,21 @@ Storico dei bug risolti e problemi noti del progetto Raxeus.
 
 ### BUG-001 — Raxeus risponde con dati vecchi (fermo al 2023)
 
-**Stato:** ✅ Risolto
+**Stato:** ✅ Risolto (fix multipli)
 
 **Sintomo:** Anche chiedendo informazioni recenti, Raxeus rispondeva con dati del suo training data (fermi al periodo di addestramento del modello), ignorando che poteva cercare su internet.
 
-**Causa:** `google_search` restituiva solo URL — nessun testo. Il modello riceveva una lista di link ma non poteva leggerne il contenuto, quindi cadeva sul proprio training data per formulare la risposta.
+**Causa (primo fix):** `google_search` restituiva solo URL — nessun testo. Il modello riceveva una lista di link ma non poteva leggerne il contenuto, quindi cadeva sul proprio training data per formulare la risposta.
 
-**Fix applicato:**
-1. `google_search` aggiornato con `advanced=True` — ora restituisce titolo, descrizione e URL per ogni risultato
-2. Aggiunto tool `fetch_url` — permette al modello di leggere il contenuto testuale di una pagina web dato il suo URL
-3. Flusso aggiornato: `google_search` trova le pagine → `fetch_url` ne legge il contenuto → il modello risponde con dati reali e aggiornati
+**Causa (secondo fix):** Il system prompt non istruiva esplicitamente il modello a usare i tool per informazioni recenti. Il modello rispondeva con il suo training data anche quando i tool erano disponibili.
+
+**Fix applicati:**
+1. `google_search` ora chiama direttamente `fetch_url` sulle prime 2 pagine trovate — restituisce contenuto reale
+2. System prompt aggiornato: regola esplicita di usare i tool senza annunciarlo, mai usare il training data per info recenti
+3. `advanced=True` rimosso da `google_search` (causava risultati vuoti su alcune versioni della libreria)
+4. `duckduckgo-search` sostituito con `ddgs` (la libreria è stata rinominata) — fix del RuntimeWarning visibile a schermo
+5. Warning stderr di `ddgs` soppresso con redirect `sys.stderr` dentro `web_search`
+6. Data corrente iniettata nel system prompt via `datetime.now()` — il modello non può più confondersi sull'anno
 
 ---
 
