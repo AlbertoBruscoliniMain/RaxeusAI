@@ -66,14 +66,8 @@ def chat(user_input: str) -> str:
                 except json.JSONDecodeError:
                     args = {}
 
-                print(f"\n  → {name}({args})", flush=True)
                 result = execute_tool(name, args)
-                preview = result[:120] + "..." if len(result) > 120 else result
-                print(f"  ← {preview}", flush=True)
-
                 memory.add_tool_result(tc["id"], name, result)
-
-            print()
         else:
             memory.add("assistant", full_content)
             return full_content

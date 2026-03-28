@@ -1,3 +1,5 @@
 openai
 duckduckgo-search
 googlesearch-python
+requests
+beautifulsoup4
