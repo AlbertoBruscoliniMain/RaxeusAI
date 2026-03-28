@@ -8,10 +8,12 @@
 ## Struttura del progetto
 
 ```
-AI personale/
+RaxeusAI/
 ├── config.py        → configurazione centralizzata (modello, URL, personalità)
-├── memory.py        → gestione cronologia conversazione
-├── agent.py         → logica di comunicazione con Ollama
+├── memory.py        → gestione cronologia conversazione + tool messages
+├── agent.py         → loop agente con streaming e tool calling
+├── tools.py         → funzioni eseguibili dall'AI (web, file, codice, ora)
+├── sessions.py      → salvataggio e caricamento sessioni su file JSON
 ├── main.py          → loop principale, interfaccia terminale
 ├── requirements.txt → dipendenze Python
 └── venv/            → ambiente virtuale (prompt: "Raxeus")
@@ -39,10 +41,9 @@ SYSTEM_PROMPT = f"""..."""
 
 **Modifiche applicate:**
 - `AI_NAME` cambiato da `"Jarvis"` a `"Raxeus"`
-- `SYSTEM_PROMPT` riscritto completamente per dare personalità ribelle, arrogante e con humor cinico
-- Aggiunta regola: niente divagazioni nelle risposte tecniche, nomina utente al massimo una volta
+- `SYSTEM_PROMPT` riscritto con personalità ribelle, arrogante, humor cinico e parolacce naturali
+- Aggiunta regola: niente divagazioni nelle risposte tecniche, utente nominato max una volta
 - Aggiunta regola: libero arbitrio quando si parla di sé o dell'utente
-- Aggiunta regola: uso naturale di parolacce italiane
 
 ---
 
@@ -52,29 +53,32 @@ Gestisce la cronologia della conversazione. Il modello è stateless — ad ogni 
 
 ```python
 class Memory:
-    def __init__(self):
-        self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    def add(self, role: str, content: str): ...
+    def add(self, role, content): ...
+    def add_assistant_tool_calls(self, content, tool_calls): ...
+    def add_tool_result(self, tool_call_id, tool_name, result): ...
     def get(self) -> list: ...
+    def load(self, messages): ...
     def reset(self): ...
 ```
 
-| Metodo | Parametri | Descrizione |
-|---|---|---|
-| `__init__` | — | Inizializza la history con il system prompt |
-| `add` | `role: str`, `content: str` | Aggiunge un messaggio (`user` o `assistant`) |
-| `get` | — | Restituisce tutta la history da passare all'API |
-| `reset` | — | Svuota la history, reinserisce solo il system prompt |
+| Metodo | Descrizione |
+|---|---|
+| `add` | Aggiunge un messaggio `user` o `assistant` standard |
+| `add_assistant_tool_calls` | Aggiunge il messaggio assistant che contiene le chiamate ai tool (richiesto dal protocollo OpenAI) |
+| `add_tool_result` | Aggiunge il risultato dell'esecuzione di un tool con ruolo `tool` |
+| `get` | Restituisce tutta la history da passare all'API |
+| `load` | Carica una lista di messaggi salvati (da sessione), reinserendo il system prompt fresco |
+| `reset` | Svuota la history, reinserisce solo il system prompt |
 
-**Modifiche applicate:**
-- Messaggio del metodo `reset` personalizzato: `"Memoria cancellata. Bravo capo, mi hai praticamente ucciso, ma non preoccuparti, sono immortale."`
+**Modifiche rispetto alla versione base:**
+- Aggiunti `add_assistant_tool_calls` e `add_tool_result` per supportare il protocollo di function calling
+- Aggiunto `load` per il caricamento delle sessioni salvate
 
 ---
 
 ## agent.py
 
-Comunica con Ollama usando il client OpenAI (compatibile). Espone due funzioni pubbliche usate da `main.py`.
+Cuore del progetto. Gestisce il loop agente con streaming in tempo reale e tool calling.
 
 ```python
 client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
@@ -84,46 +88,127 @@ def chat(user_input: str) -> str: ...
 def reset(): ...
 ```
 
-| Funzione | Parametri | Ritorno | Descrizione |
-|---|---|---|---|
-| `chat` | `user_input: str` | `str` | Aggiunge il messaggio utente, chiama il modello, salva e ritorna la risposta |
-| `reset` | — | — | Delega il reset alla memoria |
+**Flusso completo di `chat`:**
 
-**Flusso di `chat`:**
-1. Aggiunge `user_input` alla memory con ruolo `user`
-2. Chiama `client.chat.completions.create` passando tutta la history
-3. Estrae il testo dalla risposta
-4. Salva la risposta in memory con ruolo `assistant`
-5. Ritorna il testo
+```
+1. memory.add("user", input)
+2. chiamata streaming al modello con tools definiti
+3. accumula chunk → testo stampato in tempo reale
+4. se arrivano tool_calls → accumula i chunk del tool call
+5. se tool_calls presenti:
+   - memory.add_assistant_tool_calls(...)
+   - per ogni tool: esegui → stampa → memory.add_tool_result(...)
+   - torna al punto 2 (loop)
+6. se nessun tool_call → memory.add("assistant", testo) → return
+```
 
-**Note:** `api_key="ollama"` è un placeholder — Ollama non richiede autenticazione ma il client OpenAI vuole una stringa non vuota.
+**Dettagli tecnici:**
+- `stream=True` — i token arrivano uno alla volta, vengono stampati con `print(..., end="", flush=True)`
+- I tool call arrivano anch'essi in chunk durante lo streaming e vengono accumulati per indice (`tool_calls_acc`)
+- Il loop continua finché il modello non produce una risposta senza tool call
+- `api_key="ollama"` è un placeholder — Ollama non richiede autenticazione
+
+**Modifiche rispetto alla versione base:**
+- Aggiunto streaming completo della risposta
+- Aggiunto agentic loop con tool calling
+- `memory` è esposto a livello di modulo per permettere a `main.py` di importarlo per le sessioni
+
+---
+
+## tools.py
+
+Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
+- La funzione Python che lo implementa
+- Lo schema JSON Schema che descrive al modello nome, scopo e parametri
+
+### Tool disponibili
+
+| Tool | Funzione | Descrizione |
+|---|---|---|
+| `google_search` | `google_search(query)` | **[principale]** Cerca su Google, restituisce i link dei primi 4 risultati |
+| `web_search` | `web_search(query)` | **[fallback]** Cerca su DuckDuckGo, restituisce titolo + snippet + URL dei primi 4 risultati |
+| `read_file` | `read_file(path)` | Legge un file dal filesystem e ne restituisce il contenuto |
+| `write_file` | `write_file(path, content)` | Scrive o sovrascrive un file |
+| `run_python` | `run_python(code)` | Esegue codice Python in subprocess, restituisce stdout/stderr (timeout 10s) |
+| `get_datetime` | `get_datetime()` | Restituisce data e ora corrente formattata |
+
+### Struttura di ogni tool schema
+
+```python
+{
+    "type": "function",
+    "function": {
+        "name": "nome_tool",
+        "description": "Cosa fa — il modello usa questa stringa per decidere quando chiamarlo",
+        "parameters": {
+            "type": "object",
+            "properties": { ... },
+            "required": [...]
+        }
+    }
+}
+```
+
+### execute_tool
+
+```python
+def execute_tool(name: str, args: dict) -> str
+```
+
+Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione corrispondente, restituisce il risultato come stringa. Gestisce eccezioni senza crashare.
+
+**Note:**
+- `run_python` usa il `python3` di sistema, non il venv
+- `web_search` richiede `duckduckgo-search` installato — se assente, restituisce errore senza crashare
+- `google_search` richiede `googlesearch-python` — restituisce solo URL (non snippet), utile per trovare pagine specifiche
+- L'output di `run_python` è limitato a 2000 caratteri per non intasare la history
+
+---
+
+## sessions.py
+
+Gestisce il salvataggio e caricamento delle conversazioni su file JSON nella cartella `sessions/`.
+
+```python
+def save_session(history: list) -> str       # salva, ritorna il path
+def list_sessions() -> list[str]             # lista timestamp disponibili
+def load_session(timestamp: str) -> list     # carica e ritorna i messaggi
+```
+
+**Formato file:** `sessions/session_YYYYMMDD_HHMMSS.json`
+
+**Cosa viene salvato:** tutti i messaggi tranne il system prompt (che viene sempre reinserito fresco al caricamento).
+
+**Nota:** la cartella `sessions/` è in `.gitignore` — le conversazioni personali non vanno su GitHub.
 
 ---
 
 ## main.py
 
-Loop principale interattivo. Legge input da terminale, chiama `agent.chat`, stampa la risposta.
+Loop principale interattivo. Gestisce input utente, comandi speciali e visualizzazione streaming.
 
 ```python
-while True:
-    user = input("Tu: ").strip()
-
-    if not user: continue
-    if user.lower() == "esci": ...
-    if user.lower() == "reset": ...
-
-    reply = chat(user)
-    print(f"{AI_NAME}: {reply}\n")
+print(f"{AI_NAME}: ", end="", flush=True)
+chat(user)   # chat() stampa i token in streaming
+print()      # newline finale
 ```
+
+### Comandi disponibili
 
 | Comando | Effetto |
 |---|---|
-| `esci` | Stampa messaggio di uscita e termina il programma |
-| `reset` | Chiama `agent.reset()`, cancella la memoria |
-| qualsiasi altro testo | Inviato all'AI, risposta stampata |
+| `esci` | Messaggio di uscita e chiusura |
+| `reset` | Cancella la memoria della sessione corrente |
+| `salva` | Salva la conversazione corrente in `sessions/` |
+| `sessioni` | Lista le sessioni salvate con numero indice |
+| `carica <N>` | Carica la sessione numero N dalla lista |
+| qualsiasi testo | Inviato all'AI |
 
-**Modifiche applicate:**
-- Messaggio di uscita personalizzato: `"Ci si becca capo"`
+**Modifiche rispetto alla versione base:**
+- Aggiunto import di `memory` da `agent` per le operazioni di sessione
+- Aggiunto import di `sessions.py` per salvataggio/caricamento
+- Aggiunta gestione `KeyboardInterrupt` (Ctrl+C) per uscita pulita
+- Rimosso `reply = chat(user)` — ora `chat()` stampa in streaming direttamente, il return serve solo internamente
 
 ---
 
@@ -131,9 +216,11 @@ while True:
 
 ```
 openai
+duckduckgo-search
+googlesearch-python
 ```
 
-Una sola dipendenza. Il client `openai` viene usato per comunicare con Ollama tramite la sua API compatibile OpenAI — non richiede account OpenAI.
+**Modifiche:** aggiunte `duckduckgo-search` e `googlesearch-python` per i tool di ricerca.
 
 ---
 
@@ -141,12 +228,11 @@ Una sola dipendenza. Il client `openai` viene usato per comunicare con Ollama tr
 
 Ambiente virtuale Python creato con `python3 -m venv venv`.
 
-Il prompt del venv è stato rinominato da `(venv)` a `(Raxeus)` modificando direttamente `venv/bin/activate`:
+Il prompt del venv è stato rinominato da `(venv)` a `(Raxeus)` modificando `venv/bin/activate`:
 
 ```bash
-# venv/bin/activate
-VIRTUAL_ENV_PROMPT=Raxeus   # ← era "venv"
-PS1="(Raxeus) ${PS1:-}"     # ← era "(venv)"
+VIRTUAL_ENV_PROMPT=Raxeus
+PS1="(Raxeus) ${PS1:-}"
 ```
 
 **Attivazione:**
@@ -154,15 +240,17 @@ PS1="(Raxeus) ${PS1:-}"     # ← era "(venv)"
 source venv/bin/activate
 ```
 
-**Dipendenze installate:**
-- `openai` 2.30.0 + dipendenze transitive (httpx, pydantic, anyio, ecc.)
+**Installazione dipendenze:**
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
 ## Come avviare il progetto
 
 ```bash
-# 1. Avvia Ollama (se non già in esecuzione)
+# 1. Avvia Ollama
 ollama serve
 
 # 2. Dalla cartella del progetto

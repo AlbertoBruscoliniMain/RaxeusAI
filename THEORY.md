@@ -62,6 +62,42 @@ Ciclo continuo: utente parla → AI risponde o chiama un tool → risultato → 
 
 ---
 
+## Streaming
+
+Per default, un modello genera tutta la risposta e la restituisce in una volta. Con lo **streaming** i token arrivano uno alla volta appena prodotti — come si vede su ChatGPT.
+
+Tecnicamente: l'API apre una connessione HTTP persistente (Server-Sent Events) e manda i chunk man mano. Il client li riceve e li stampa in tempo reale. Il risultato finale è identico, ma l'esperienza percepita è molto più reattiva.
+
+---
+
+## Function calling (tool use)
+
+Il meccanismo con cui un LLM può chiamare funzioni esterne. Il funzionamento:
+
+1. Insieme ai messaggi, mandi al modello una lista di **tool disponibili** (nome, descrizione, parametri in JSON Schema)
+2. Il modello decide se rispondere direttamente o chiamare un tool
+3. Se chiama un tool, restituisce un oggetto JSON con nome e argomenti invece di testo
+4. Il tuo codice esegue la funzione corrispondente
+5. Il risultato viene reinserito nella conversazione come messaggio `tool`
+6. Il modello riceve il risultato e genera la risposta finale
+
+Questo ciclo può ripetersi più volte (il modello può chiamare più tool in sequenza) prima di rispondere all'utente.
+
+```
+Utente → Modello → tool_call → esegui → risultato → Modello → risposta
+                       ↑___________________________|  (loop se serve)
+```
+
+---
+
+## Sessioni persistenti
+
+Per default la memoria esiste solo durante l'esecuzione del programma — alla chiusura, tutto si perde. Per mantenere le conversazioni tra sessioni diverse si serializza la history in un file JSON.
+
+Al riavvio si può ricaricare la history precedente e continuare da dove si era rimasti. Il system prompt viene sempre reinserito fresco (non salvato) per garantire che la personalità sia sempre aggiornata.
+
+---
+
 ## Modelli locali — confronto
 
 Tutti i runner locali funzionano allo stesso modo nel codice (API compatibile OpenAI), ma differiscono per performance e portabilità.
@@ -126,7 +162,6 @@ Cambiare il system prompt è il modo più rapido per creare un'AI con carattere 
 |---|---|
 | Assistente vocale | TTS (text-to-speech) + STT (speech-to-text) |
 | Bot Telegram | python-telegram-bot + stesso agent.py |
-| Agente che naviga il web | tool di ricerca (es. DuckDuckGo API) |
-| Tutor personalizzato | system prompt specifico + fine-tuning |
-| Agente che legge/scrive file | tool read_file / write_file |
 | UI grafica | Streamlit (rapido) o React (completo) |
+| Tutor personalizzato | system prompt specifico + fine-tuning |
+| RAG (risponde su documenti tuoi) | vettorizzazione testi + retrieval |
