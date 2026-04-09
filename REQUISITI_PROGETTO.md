@@ -2,6 +2,7 @@
 
 > Questo documento descrive il progetto **RaxeusAI** realizzato per il modulo `03_Sviluppo_Web_e_Database`.
 > RaxeusAI è un assistente AI personale con interfaccia web, costruito in Python/Flask con integrazione al modello linguistico locale tramite Ollama.
+> Il progetto nasce come iniziativa personale e viene successivamente adottato come progetto scolastico di fine anno.
 
 ## 1. Introduzione
 
@@ -15,7 +16,9 @@ Lo scopo di questo documento è:
 
 ### 1.2 Contesto
 
-RaxeusAI nasce come progetto di fine anno per dimostrare la realizzazione di un'applicazione web completa con:
+RaxeusAI nasce come **progetto personale** — sviluppato autonomamente per uso privato — e viene successivamente adottato come **progetto scolastico di fine anno** per il modulo `03_Sviluppo_Web_e_Database`. Questa doppia origine ha permesso di lavorare su un prodotto reale e funzionante fin dall'inizio, anziché su un esercizio accademico costruito ad hoc.
+
+Il progetto dimostra la realizzazione di un'applicazione web completa con:
 - backend in Python/Flask;
 - interfaccia web dinamica con streaming e aggiornamenti in tempo reale;
 - persistenza dei dati su file;
@@ -219,13 +222,15 @@ graph LR
 
 ## 10. Pianificazione e milestone
 
-| Fase | Attività |
-| --- | --- |
-| 1 | Analisi dei requisiti, schema architettura, setup ambiente (Ollama, venv, Flask) |
-| 2 | Backend: memoria conversazionale, agent loop con streaming |
-| 3 | Tool calling: web search, file, Python, PDF, Wikipedia |
-| 4 | Web UI: template HTML, streaming SSE, tab management, color picker |
-| 5 | Markdown rendering, persistenza sessioni, testing, documentazione, push su GitHub |
+| Fase | Attività | Periodo |
+| --- | --- | --- |
+| 1 | Analisi dei requisiti, schema architettura, setup ambiente (Ollama, venv, Flask) | Aprile 2026 |
+| 2 | Backend: memoria conversazionale, agent loop con streaming | Aprile 2026 |
+| 3 | Tool calling: web search, file, Python, PDF, Wikipedia | Aprile–Maggio 2026 |
+| 4 | Web UI: template HTML, streaming SSE, tab management, color picker | Maggio 2026 |
+| 5 | Markdown rendering, persistenza sessioni, testing, documentazione, push su GitHub | Fine Maggio 2026 |
+
+**Consegna prevista: 31 maggio 2026.**
 
 ### 10.1 Gantt semplificato
 
@@ -246,8 +251,8 @@ gantt
     Tab e color picker             :c3, after c2, 3d
     section Rifinitura
     Markdown rendering             :d1, after c3, 2d
-    Test e documentazione          :d2, after d1, 3d
-    Consegna su GitHub             :d3, after d2, 1d
+    Test e documentazione          :d2, after d1, 7d
+    Consegna su GitHub             :d3, 2026-05-31, 1d
 ```
 
 ## 11. Suggerimenti per la consegna
