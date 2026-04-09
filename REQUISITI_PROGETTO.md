@@ -16,7 +16,7 @@ Lo scopo di questo documento è:
 
 ### 1.2 Contesto
 
-RaxeusAI nasce come **progetto personale** — sviluppato autonomamente per uso privato — e viene successivamente adottato come **progetto scolastico di fine anno** per il modulo `03_Sviluppo_Web_e_Database`. Questa doppia origine ha permesso di lavorare su un prodotto reale e funzionante fin dall'inizio, anziché su un esercizio accademico costruito ad hoc.
+RaxeusAI nasce come * *progetto personale** — sviluppato autonomamente per uso privato — e viene successivamente adottato come **progetto scolastico di fine anno** per il modulo `03_Sviluppo_Web_e_Database`. Questa doppia origine ha permesso di lavorare su un prodotto reale e funzionante fin dall'inizio, anziché su un esercizio accademico costruito ad hoc.
 
 Il progetto dimostra la realizzazione di un'applicazione web completa con:
 - backend in Python/Flask;
@@ -255,10 +255,4 @@ gantt
     Consegna su GitHub             :d3, 2026-05-31, 1d
 ```
 
-## 11. Suggerimenti per la consegna
 
-- Caricare il progetto su GitHub con struttura chiara.
-- Tenere un file `README.md` con istruzioni di installazione e avvio.
-- Usare `.gitignore` per escludere `venv/`, `__pycache__/`, `sessions/`.
-- Includere un file `requirements.txt` aggiornato.
-- Fare commit frequenti e significativi.
