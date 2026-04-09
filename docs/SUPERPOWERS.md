@@ -40,6 +40,6 @@ Quando si aggiunge una feature con Superpowers si seguono tre fasi:
 
 ---
 
-## La cartella docs/ (rimossa)
+## La cartella docs/
 
-Conteneva la spec e il piano della web UI, generati automaticamente durante il workflow Superpowers. Ora quei contenuti sono stati spostati qui e in [WEB-UI.md](WEB-UI.md). La cartella `docs/` è stata eliminata perché aggiungeva struttura senza utilità reale — tutto quello che serve è già nei file `.md` nella root.
+Contiene tutti i file di documentazione del progetto. Generata raccogliendo i `.md` dalla root, inclusi quelli prodotti dal workflow Superpowers (spec e piano della web UI ora confluiti in [WEB-UI.md](WEB-UI.md)).
