@@ -3,3 +3,5 @@ ddgs
 googlesearch-python
 requests
 beautifulsoup4
+pypdf
+flask
