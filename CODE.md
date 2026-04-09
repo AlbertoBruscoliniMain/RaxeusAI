@@ -9,14 +9,20 @@
 
 ```
 RaxeusAI/
-├── config.py        → configurazione centralizzata (modello, URL, personalità)
-├── memory.py        → gestione cronologia conversazione + tool messages
-├── agent.py         → loop agente con streaming e tool calling
-├── tools.py         → funzioni eseguibili dall'AI (web, file, codice, ora)
-├── sessions.py      → salvataggio e caricamento sessioni su file JSON
-├── main.py          → loop principale, interfaccia terminale
-├── requirements.txt → dipendenze Python
-└── venv/            → ambiente virtuale (prompt: "Raxeus")
+├── config.py           → configurazione centralizzata (modello, URL, personalità)
+├── memory.py           → gestione cronologia conversazione + tool messages
+├── agent.py            → loop agente con streaming, tool calling e chat_stream per la web UI
+├── tools.py            → funzioni eseguibili dall'AI (web, file, PDF, Wikipedia, ora)
+├── sessions.py         → salvataggio e caricamento sessioni su file JSON
+├── main.py             → loop terminale (ancora funzionante)
+├── app.py              → server Flask per la web UI
+├── templates/
+│   └── index.html      → SPA: tutto il markup dell'interfaccia web
+├── static/
+│   ├── style.css       → tema scuro, layout completo
+│   └── app.js          → logica tab, streaming SSE, color picker, localStorage
+├── requirements.txt    → dipendenze Python
+└── venv/               → ambiente virtuale (prompt: "Raxeus")
 ```
 
 ---
@@ -113,6 +119,14 @@ def reset(): ...
 - Aggiunto agentic loop con tool calling
 - Rimossi print di debug dei tool call (fix BUG-002)
 - `memory` è esposto a livello di modulo per permettere a `main.py` di importarlo per le sessioni
+- Aggiunto `chat_stream` per la web UI (vedi sotto)
+
+**`chat_stream(user_input, mem)`:** versione generator di `chat` per la web UI. Invece di stampare su stdout, yielda dizionari:
+- `{"type": "token", "content": "..."}` — per ogni chunk di testo generato
+- `{"type": "thinking"}` — quando il modello inizia una tool call
+- `{"type": "done"}` — quando la risposta è completa
+
+Viene chiamata da `app.py` e i dizionari vengono serializzati come eventi SSE inviati al browser.
 
 ---
 
@@ -131,6 +145,10 @@ Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
 | `web_search` | `web_search(query)` | **[fallback]** Cerca su DuckDuckGo via `ddgs`, restituisce titolo + snippet + URL dei primi 5 risultati |
 | `read_file` | `read_file(path)` | Legge un file dal filesystem e ne restituisce il contenuto |
 | `write_file` | `write_file(path, content)` | Scrive o sovrascrive un file |
+| `append_file` | `append_file(path, content)` | Aggiunge testo in fondo a un file senza sovrascriverlo |
+| `list_dir` | `list_dir(path)` | Elenca i file e le cartelle in una directory (default: `.`) |
+| `read_pdf` | `read_pdf(path)` | Estrae e restituisce il testo da un file PDF (max 4000 char, richiede `pypdf`) |
+| `wikipedia_search` | `wikipedia_search(query, lang)` | Cerca su Wikipedia e restituisce il sommario della pagina (default lang: `it`) |
 | `run_python` | `run_python(code)` | Esegue codice Python in subprocess, restituisce stdout/stderr (timeout 10s) |
 | `get_datetime` | `get_datetime()` | Restituisce data e ora corrente formattata |
 
@@ -166,6 +184,69 @@ Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione cor
 - `fetch_url` usa `requests` + `beautifulsoup4` per estrarre solo il testo pulito dalla pagina, rimuovendo script/stili/nav
 - Alcuni siti bloccano `fetch_url` con 403 (vedi BUG-005 in BUGS.md)
 - L'output di `run_python` è limitato a 2000 caratteri per non intasare la history
+- `append_file` apre in modalità `"a"` — crea il file se non esiste, aggiunge in fondo se esiste
+- `list_dir` usa `os.listdir` con output ordinato alfabeticamente
+- `read_pdf` usa `pypdf` (guard `_PYPDF_OK`), estrae testo pagina per pagina, limite 4000 char
+- `wikipedia_search` usa l'API REST di Wikipedia (`/api/rest_v1/page/summary/`) — nessuna dipendenza extra, usa `requests` già presente; supporta qualsiasi lingua via parametro `lang`
+
+---
+
+## app.py
+
+Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, Memory]` con una `Memory` attiva per ogni conversazione aperta nel browser.
+
+### Endpoint
+
+| Metodo | Path | Descrizione |
+|---|---|---|
+| `GET` | `/` | Serve `templates/index.html` |
+| `POST` | `/chat` | Riceve `{message, session_id}`, risponde in SSE con eventi `token`, `thinking`, `done` |
+| `GET` | `/sessions` | Restituisce lista delle ultime 5 sessioni salvate su disco |
+| `DELETE` | `/session/<id>` | Elimina il file sessione dal disco e rimuove la Memory dal dizionario |
+
+**`_get_memory(session_id)`:** recupera la Memory dal dizionario; se non esiste la crea, e se esiste un file sessione corrispondente lo carica automaticamente da disco.
+
+**Avvio:**
+```bash
+source venv/bin/activate
+python app.py
+# apri http://localhost:5000
+```
+
+---
+
+## templates/index.html
+
+SPA unica. Contiene solo il markup HTML strutturale — nessuna logica. Carica `style.css` e `app.js`. Il DOM viene popolato interamente da `app.js` a runtime.
+
+Struttura: `#topbar` (logo, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (textarea + pulsante invia).
+
+---
+
+## static/style.css
+
+Tema scuro completo. Usa variabili CSS (`--bg`, `--bubble-bg`, `--bubble-text`, ecc.) per mantenere i colori coerenti e permettere futuri temi.
+
+Elementi principali: `#topbar`, `.tab`, `.tab.active`, `.bubble-user`, `.bubble-ai`, `.spinner`, `#color-dot`, `#color-picker`, `.preset-dot`.
+
+---
+
+## static/app.js
+
+Tutta la logica del frontend. Nessuna dipendenza esterna.
+
+| Responsabilità | Funzioni chiave |
+|---|---|
+| Gestione tab | `addTab`, `activateTab`, `removeTab`, `renderTabs`, `newChat` |
+| Messaggi e localStorage | `appendMessage`, `buildBubble`, `loadMessages`, `saveMessages`, `renderChat` |
+| Streaming SSE | `sendMessage` — legge il body come stream, aggiorna la bolla AI token per token |
+| Color picker | `setColor`, `loadColor`, `applyBubbleColor`, `updateColorDot`, `buildPresets` |
+
+**Persistenza locale:** i messaggi di ogni chat sono in `localStorage` con chiave `chat_<session_id>`. Il colore bolla è in `bubble_color_<session_id>`. Al ricaricamento tutto viene ripristinato.
+
+**Max 5 tab:** aprire la sesta chat chiude automaticamente la prima (la più vecchia).
+
+**Titolo automatico:** al primo invio, il titolo della tab si imposta con le prime 30 caratteri del messaggio utente.
 
 ---
 
@@ -224,9 +305,10 @@ ddgs
 googlesearch-python
 requests
 beautifulsoup4
+pypdf
 ```
 
-**Modifiche:** aggiunte `duckduckgo-search`, `googlesearch-python`, `requests` e `beautifulsoup4` per ricerca web e fetch pagine.
+**Modifiche:** aggiunte `duckduckgo-search`, `googlesearch-python`, `requests` e `beautifulsoup4` per ricerca web e fetch pagine. Aggiunta `pypdf` per la lettura di file PDF. Aggiunta `flask` per la web UI.
 
 ---
 

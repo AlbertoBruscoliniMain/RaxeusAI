@@ -156,6 +156,36 @@ Cambiare il system prompt è il modo più rapido per creare un'AI con carattere 
 
 ---
 
+## Server-Sent Events (SSE)
+
+Meccanismo HTTP per inviare dati dal server al browser in modo continuo su una singola connessione. Il server manda righe nel formato `data: <payload>\n\n` e il browser le riceve man mano che arrivano.
+
+In RaxeusAI viene usato per lo streaming dei token: ogni pezzo di testo generato dal modello viene inviato immediatamente al browser invece di aspettare la risposta completa.
+
+```
+Client                         Server
+  |--- POST /chat ----------->|
+  |<-- data: {"type":"token"} |  (ripetuto per ogni token)
+  |<-- data: {"type":"done"}  |
+```
+
+A differenza dei WebSocket (bidirezionali), SSE è unidirezionale server→client e non richiede librerie speciali — funziona con `fetch()` nativo leggendo `res.body` come stream.
+
+---
+
+## Architettura web vs terminale
+
+RaxeusAI supporta due modalità sullo stesso backend:
+
+| Modalità | Entry point | Streaming | Sessioni |
+|---|---|---|---|
+| Terminale | `main.py` → `agent.chat()` | stdout diretto | `sessions.py` manuale |
+| Web | `app.py` → `agent.chat_stream()` | SSE via HTTP | `sessions.py` + localStorage |
+
+Le due modalità condividono `Memory`, `tools.py` e `sessions.py` — solo il layer di presentazione è diverso. `main.py` continua a funzionare indipendentemente.
+
+---
+
 ## Cosa puoi costruire con questa base
 
 | Progetto | Cosa aggiungere |
