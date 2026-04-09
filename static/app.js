@@ -121,7 +121,7 @@ function buildBubble(role, content) {
     av.textContent = 'R';
     const b = document.createElement('div');
     b.className = 'bubble-ai';
-    b.textContent = content;
+    b.innerHTML = marked.parse(content);
     wrap.appendChild(av);
     wrap.appendChild(b);
   }
@@ -215,7 +215,7 @@ async function sendMessage() {
           chatEl.appendChild(wrap);
         }
         aiContent += evt.content;
-        aiBubble.textContent = aiContent;
+        aiBubble.innerHTML = marked.parse(aiContent);
         scrollBottom();
       } else if (evt.type === 'done') {
         if (aiBubble) {
