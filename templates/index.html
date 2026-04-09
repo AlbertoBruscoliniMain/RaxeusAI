@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raxeus</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <div id="topbar">
+    <span id="logo">Raxeus</span>
+
+    <div id="search-wrap">
+      <input id="search" type="text" placeholder="cerca...">
+    </div>
+
+    <div id="tabs"></div>
+
+    <button id="btn-new">+</button>
+
+    <div id="color-dot-wrap">
+      <div id="color-dot"></div>
+      <div id="color-picker" class="hidden">
+        <div class="picker-label">Colore bolla</div>
+        <div id="presets"></div>
+        <input type="color" id="custom-color" title="Colore custom">
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-area"></div>
+
+  <div id="input-wrap">
+    <div id="input-bar">
+      <textarea id="msg-input" rows="1" placeholder="Messaggio..."></textarea>
+      <button id="btn-send">invia</button>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
