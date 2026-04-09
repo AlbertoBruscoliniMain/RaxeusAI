@@ -1,290 +1,259 @@
 # Documento dei Requisiti
 
-> Questo documento descrive in modo chiaro il prodotto da realizzare, raccoglie requisiti funzionali e non funzionali, propone una prima progettazione concettuale con diagrammi ER, UML e casi d'uso, e definisce una roadmap di lavoro con milestone principali.
+> Questo documento descrive il progetto **RaxeusAI** realizzato per il modulo `03_Sviluppo_Web_e_Database`.
+> RaxeusAI è un assistente AI personale con interfaccia web, costruito in Python/Flask con integrazione al modello linguistico locale tramite Ollama.
 
 ## 1. Introduzione
 
 ### 1.1 Scopo del documento
 
 Lo scopo di questo documento è:
-- descrivere in modo chiaro il prodotto che gli studenti dovranno realizzare;
+- descrivere in modo chiaro il prodotto realizzato;
 - raccogliere i requisiti funzionali e non funzionali;
-- fornire una prima progettazione concettuale con diagrammi ER, UML e casi d'uso;
-- definire una roadmap di lavoro con milestone e attività principali.
+- fornire una progettazione concettuale con diagrammi UML e casi d'uso;
+- definire la roadmap di lavoro con milestone e attività principali.
 
 ### 1.2 Contesto
 
-Gli studenti del quinto anno devono realizzare un piccolo progetto web con backend in Python/Flask e database relazionale. Il tema è libero, ma è consigliabile scegliere un prodotto che preveda:
-- una gestione dati persistente;
-- una parte di autenticazione e sicurezza;
-- un'interfaccia web con visualizzazione dinamica;
-- relazioni tra più tabelle nel database.
+RaxeusAI nasce come progetto di fine anno per dimostrare la realizzazione di un'applicazione web completa con:
+- backend in Python/Flask;
+- interfaccia web dinamica con streaming e aggiornamenti in tempo reale;
+- persistenza dei dati su file;
+- integrazione con un modello di linguaggio (LLM) locale tramite Ollama.
 
-### 1.3 Tema d'esempio
+Il progetto non utilizza un database relazionale tradizionale: la persistenza delle conversazioni è affidata a file JSON, scelta motivata dalla natura single-user dell'applicazione e dall'assenza di relazioni complesse tra dati strutturati.
 
-Tema scelto per l'esempio: **RecipeHub**.
-RecipeHub è un ricettario digitale in cui gli utenti possono creare, condividere e salvare ricette.
+### 1.3 Tema
 
-> Nota: il tema è un esempio. Gli studenti possono scegliere un progetto diverso, come un diario di allenamenti, un gestore di eventi, una wallet app o un catalogo personalizzato.
+Tema scelto: **RaxeusAI**.
+RaxeusAI è un assistente AI personale che gira localmente sul Mac tramite Ollama. Risponde in streaming, usa tool reali in autonomia (ricerca web, esecuzione Python, lettura file, PDF, Wikipedia) e dispone di un'interfaccia web con tab multiple e personalizzazione grafica.
 
 ## 2. Obiettivi generali
 
-- Permettere a un utente di registrarsi e autenticarsi.
-- Consentire la creazione, modifica, eliminazione e visualizzazione delle ricette.
-- Consentire la ricerca e il filtro delle ricette per categoria, difficoltà o tempo di preparazione.
-- Permettere di salvare ricette tra i preferiti.
-- Fornire una pagina di profilo dove l'utente vede le proprie ricette.
+- Permettere all'utente di conversare con un LLM locale in tempo reale.
+- Rispondere in streaming token per token per un'esperienza fluida.
+- Eseguire tool reali in autonomia: ricerca web, esecuzione di codice Python, lettura/scrittura file, lettura PDF, ricerca Wikipedia, data e ora.
+- Mantenere la memoria conversazionale multi-turno all'interno di una sessione.
+- Salvare e ricaricare le sessioni di chat passate.
+- Offrire un'interfaccia web con tab multiple, ricerca nelle chat, tema scuro e personalizzazione del colore delle bolle.
+- Offrire anche un'interfaccia da terminale per uso rapido.
 
 ## 3. Stakeholder e attori
 
 | Stakeholder | Ruolo | Interesse |
 | --- | --- | --- |
-| Studente | Sviluppatore | Realizzare il progetto rispettando i requisiti |
+| Sviluppatore | Alberto Bruscolini | Realizzare e mantenere il progetto |
 | Docente | Valutatore | Verificare correttezza tecnica e completezza |
-| Utente finale | Studente o studentessa | Usare l'app per salvare e consultare ricette |
+| Utente finale | Utente singolo locale | Usare l'assistente per domande, ricerche e automazioni |
 
 ### Attori principali
 
-- `Utente autenticato`
-- `Visitatore` (utente non autenticato)
-- `Amministratore` (opzionale, se si vuole aggiungere gestione contenuti)
+- `Utente locale` (unico attore — app single-user senza autenticazione)
 
 ## 4. Requisiti funzionali
 
 ### 4.1 Requisiti principali
 
-1. Registrazione e login.
-2. Creazione di una nuova ricetta con titolo, lista ingredienti, descrizione, categoria, tempo di preparazione, livello di difficoltà.
-3. Visualizzazione dei dettagli di ogni ricetta.
-4. Modifica ed eliminazione delle ricette create dall'utente.
-5. Ricerca e filtro delle ricette.
-6. Aggiunta di ricette ai preferiti.
-7. Visualizzazione delle ricette preferite e delle proprie ricette.
+1. Invio di messaggi all'assistente AI e ricezione di risposte in streaming.
+2. Esecuzione autonoma di tool da parte dell'AI: ricerca web (Google, DuckDuckGo), lettura e scrittura file, esecuzione Python, lettura PDF, ricerca Wikipedia, data e ora corrente, esplorazione directory.
+3. Memoria conversazionale multi-turno: il modello ricorda l'intera conversazione nella sessione corrente.
+4. Gestione di sessioni multiple: creazione, navigazione, eliminazione e ricerca tra le chat.
+5. Persistenza delle sessioni su file JSON: le conversazioni vengono salvate e ricaricate all'avvio.
+6. Interfaccia web con tab multiple (max 5 simultanee), barra di ricerca nelle chat e colore bolla personalizzabile.
+7. Rendering del markdown nelle risposte (titoli, codice, tabelle, grassetto, ecc.).
+8. Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `esci`.
 
 ### 4.2 User stories
 
-- Come **utente**, voglio registrarmi e accedere affinché le mie ricette siano salvate sotto il mio account.
-- Come **utente autenticato**, voglio creare una ricetta per condividerla con altri.
-- Come **utente**, voglio cercare ricette per categoria in modo da trovare rapidamente quelle che mi interessano.
-- Come **utente autenticato**, voglio salvare ricette ai preferiti per ritrovarle facilmente.
-- Come **visitatore**, voglio vedere l'elenco delle ricette pubbliche senza dover fare il login.
+- Come **utente**, voglio inviare un messaggio e vedere la risposta apparire in tempo reale, parola per parola.
+- Come **utente**, voglio che l'assistente cerchi informazioni su internet senza doverlo chiedere esplicitamente.
+- Come **utente**, voglio avere più conversazioni aperte contemporaneamente in tab separate.
+- Come **utente**, voglio ritrovare una conversazione passata cercandola per parola chiave.
+- Come **utente**, voglio personalizzare il colore delle bolle dei messaggi per ogni chat.
+- Come **utente**, voglio che le mie conversazioni vengano salvate automaticamente e ricaricate al prossimo avvio.
 
 ## 5. Requisiti non funzionali
 
-- L'app deve avere un'interfaccia semplice e chiara.
-- Il login deve essere protetto con hashing delle password.
-- Il backend deve usare un database relazionale (es. SQLite / PostgreSQL).
-- Il codice deve essere organizzato con Blueprints e repository pattern.
-- Deve essere possibile eseguire il progetto localmente con un ambiente virtuale Python.
-- I dati devono essere persistenti tra una sessione e l'altra.
+- L'app deve girare localmente senza connessione obbligatoria (il modello AI è locale via Ollama).
+- Le risposte devono essere trasmesse in streaming tramite Server-Sent Events (SSE).
+- Il backend deve essere realizzato con Python/Flask.
+- Il progetto deve essere eseguibile localmente con un ambiente virtuale Python (`venv`).
+- L'interfaccia web deve avere tema scuro e layout reattivo.
+- Le sessioni devono essere persistenti tra un avvio e l'altro (file JSON nella cartella `sessions/`).
+- Il codice deve essere organizzato in moduli separati con responsabilità chiare.
 
 ## 6. Glossario dei termini
 
-- `Ricetta`: un contenuto creato da un utente, composto da titolo, ingredienti, procedimento e metadati.
-- `Categoria`: un raggruppamento tematico di ricette (es. `vegan`, `dolci`, `antipasti`).
-- `Ingrediente`: voce testuale associata a una ricetta.
-- `Preferito`: associazione tra utente e ricetta salvata.
-- `Utente`: account registrato che può gestire ricette e preferiti.
+- `LLM`: Large Language Model — modello di linguaggio di grandi dimensioni che genera testo.
+- `Ollama`: strumento che permette di eseguire LLM localmente sul proprio computer.
+- `Tool calling`: capacità del modello di richiamare funzioni esterne (tool) durante la generazione della risposta.
+- `Streaming`: tecnica che invia la risposta al client token per token, man mano che viene generata.
+- `SSE` (Server-Sent Events): protocollo HTTP che permette al server di inviare aggiornamenti in tempo reale al browser.
+- `Sessione`: una conversazione singola con l'assistente, identificata da un UUID e salvata come file JSON.
+- `Memoria conversazionale`: cronologia dei messaggi della sessione corrente, passata al modello a ogni turno.
+- `Tab`: scheda nell'interfaccia web che rappresenta una sessione di chat aperta.
 
-## 7. Entità e relazioni (schema ER)
+## 7. Modello dei dati
 
-Di seguito un esempio di schema concettuale. Questo diagramma aiuta a capire le tabelle principali e i loro legami.
+RaxeusAI non utilizza un database relazionale. La persistenza è gestita tramite file JSON nella cartella `sessions/`. Di seguito la struttura dei dati principali.
 
-```mermaid
-erDiagram
-    UTENTE {
-        int id PK
-        string nome
-        string email
-        string password_hash
-        datetime data_creazione
-    }
-    RICETTA {
-        int id PK
-        string titolo
-        string descrizione
-        string livello_difficolta
-        int tempo_preparazione
-        int categoria_id FK
-        int autore_id FK
-        datetime data_creazione
-    }
-    CATEGORIA {
-        int id PK
-        string nome
-    }
-    INGREDIENTE {
-        int id PK
-        string nome
-    }
-    RICETTA_INGREDIENTE {
-        int ricetta_id FK
-        int ingrediente_id FK
-        string quantita
-    }
-    PREFERITO {
-        int id PK
-        int utente_id FK
-        int ricetta_id FK
-        datetime data_aggiunta
-    }
-    COMMENTO {
-        int id PK
-        int ricetta_id FK
-        int utente_id FK
-        string testo
-        datetime data_creazione
-    }
+### Struttura di una sessione (file JSON)
 
-    UTENTE ||--o{ RICETTA : crea
-    CATEGORIA ||--o{ RICETTA : contiene
-    RICETTA ||--o{ RICETTA_INGREDIENTE : ha
-    INGREDIENTE ||--o{ RICETTA_INGREDIENTE : utilizzato_in
-    UTENTE ||--o{ PREFERITO : salva
-    RICETTA ||--o{ PREFERITO : salvata_come
-    UTENTE ||--o{ COMMENTO : scrive
-    RICETTA ||--o{ COMMENTO : riceve
+```json
+{
+  "session_id": "uuid-v4",
+  "messages": [
+    { "role": "user", "content": "Testo del messaggio" },
+    { "role": "assistant", "content": "Risposta dell'AI" },
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "tool-id",
+          "type": "function",
+          "function": { "name": "google_search", "arguments": "{\"query\": \"...\"}" }
+        }
+      ]
+    },
+    { "role": "tool", "tool_call_id": "tool-id", "name": "google_search", "content": "risultato" }
+  ]
+}
 ```
 
-> Questo ER è utile per la fase di progettazione, ma non è obbligatorio: può essere sostituito da un disegno a mano libera o da un elenco di entità/relazioni.
+### Dati nel browser (localStorage)
+
+| Chiave | Valore |
+| --- | --- |
+| `chat_<session_id>` | Array JSON dei messaggi della chat |
+| `bubble_color_<session_id>` | Oggetto JSON `{ bg, text }` con il colore della bolla |
 
 ## 8. Diagramma UML delle classi
 
-Di seguito un esempio di diagramma delle classi che mostra le classi principali dell'app.
-
 ```mermaid
 classDiagram
-    class Utente {
-        +int id
-        +string nome
-        +string email
-        +string password_hash
-        +datetime data_creazione
-        +login(password)
-        +logout()
-        +isPasswordValida(password)
+    class Memory {
+        -list messages
+        +add(role, content)
+        +add_assistant_tool_calls(content, tool_calls)
+        +add_tool_result(tool_call_id, name, result)
+        +get() list
+        +load(messages)
+        +reset()
     }
-    class Ricetta {
-        +int id
-        +string titolo
-        +string descrizione
-        +string livello_difficolta
-        +int tempo_preparazione
-        +int categoria_id
-        +int autore_id
-        +datetime data_creazione
-        +aggiungiIngrediente(ingrediente, quantita)
-        +rimuoviIngrediente(ingrediente)
+    class Agent {
+        +chat(user_input) str
+        +chat_stream(user_input, mem) Generator
+        +reset()
     }
-    class Categoria {
-        +int id
-        +string nome
+    class Tools {
+        +google_search(query) str
+        +web_search(query) str
+        +fetch_url(url) str
+        +read_file(path) str
+        +write_file(path, content) str
+        +append_file(path, content) str
+        +run_python(code) str
+        +read_pdf(path) str
+        +wikipedia_search(query, lang) str
+        +list_dir(path) str
+        +get_datetime() str
+        +execute_tool(name, args) str
     }
-    class Ingrediente {
-        +int id
-        +string nome
+    class Sessions {
+        +save_session(messages)
+        +load_session(session_id) list
+        +list_sessions() list
     }
-    class Preferito {
-        +int id
-        +int utente_id
-        +int ricetta_id
-        +datetime data_aggiunta
-    }
-    class Commento {
-        +int id
-        +int ricetta_id
-        +int utente_id
-        +string testo
-        +datetime data_creazione
-    }
-    class RecipeRepository {
-        +getAll()
-        +getById(id)
-        +create(data)
-        +update(id, data)
-        +delete(id)
-    }
-    class UserRepository {
-        +getByEmail(email)
-        +create(data)
-        +getById(id)
+    class FlaskApp {
+        +index() Response
+        +chat() Response
+        +get_sessions() Response
+        +delete_session(session_id) Response
     }
 
-    Utente "1" -- "*" Ricetta : crea
-    Categoria "1" -- "*" Ricetta : contiene
-    Ricetta "1" -- "*" Commento : riceve
-    Utente "1" -- "*" Commento : scrive
-    Utente "1" -- "*" Preferito : salva
-    Ricetta "1" -- "*" Preferito : ricevuta
+    FlaskApp --> Memory : crea una per sessione
+    FlaskApp --> Agent : chiama chat_stream
+    Agent --> Memory : legge e scrive
+    Agent --> Tools : esegue tool
+    FlaskApp --> Sessions : salva e carica
 ```
-
-> Il diagramma UML aiuta a capire le classi e i servizi principali. È utile ma non indispensabile; anche uno schema di classi semplificato è valido.
 
 ## 9. Casi d'uso
 
 ### 9.1 Casi d'uso principali
 
-1. `Registrazione utente`
-2. `Login`
-3. `Crea ricetta`
-4. `Modifica ricetta`
-5. `Elimina ricetta`
-6. `Visualizza elenco ricette`
-7. `Cerca ricette`
-8. `Aggiungi ai preferiti`
-9. `Visualizza ricette preferite`
+1. `Invia messaggio`
+2. `Ricevi risposta in streaming`
+3. `Esecuzione automatica tool`
+4. `Apri nuova chat`
+5. `Cambia tab attiva`
+6. `Chiudi tab`
+7. `Cerca tra le chat`
+8. `Personalizza colore bolla`
+9. `Carica sessione passata`
 
 ### 9.2 Descrizione semplificata dei casi d'uso
 
-- **Registrazione utente**: il visitatore inserisce nome, email e password; il sistema crea un account e memorizza le credenziali in modo sicuro.
-- **Login**: l'utente inserisce email e password; il sistema verifica le credenziali e apre la sessione.
-- **Crea ricetta**: l'utente autenticato compila un form con titolo, ingredienti, procedimento e categorie; il sistema salva la ricetta.
-- **Cerca ricette**: l'utente inserisce parole chiave o filtra per categoria/difficoltà; il sistema mostra i risultati corrispondenti.
-- **Aggiungi ai preferiti**: l'utente autenticato seleziona una ricetta e la salva tra i preferiti.
+- **Invia messaggio**: l'utente digita un testo e preme Invio o il pulsante "invia"; il frontend invia la richiesta via POST a `/chat` con il testo e l'ID sessione.
+- **Ricevi risposta in streaming**: il backend apre una connessione SSE e invia token per token; il frontend aggiorna la bolla in tempo reale.
+- **Esecuzione automatica tool**: durante la generazione, il modello decide autonomamente di chiamare un tool (es. `google_search`); il backend esegue il tool e rimanda il risultato al modello prima di continuare la risposta.
+- **Apri nuova chat**: l'utente clicca `+`; viene creata una nuova tab con UUID univoco e titolo automatico al primo messaggio.
+- **Cerca tra le chat**: l'utente digita nella barra di ricerca; le tab vengono filtrate in tempo reale per titolo.
+- **Personalizza colore bolla**: l'utente clicca il pallino colorato in alto a destra, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
 
 ### 9.3 Diagramma dei casi d'uso
 
-Il diagramma dei casi d'uso è uno strumento grafico utile per rappresentare gli attori e le interazioni con il sistema. Può essere realizzato con PlantUML, disegno a mano libera o un semplice elenco.
-
-> In classe può bastare anche un diagramma disegnato a mano o un file immagine generato esternamente.
+```mermaid
+graph LR
+    U[Utente] --> IM[Invia messaggio]
+    U --> NB[Apri nuova chat]
+    U --> CT[Cambia tab attiva]
+    U --> CL[Chiudi tab]
+    U --> SR[Cerca tra le chat]
+    U --> PC[Personalizza colore bolla]
+    IM --> RS[Risposta in streaming]
+    RS --> ET[Esecuzione tool automatica]
+    ET --> RS
+```
 
 ## 10. Pianificazione e milestone
 
-Un possibile piano di lavoro su 5 settimane:
-
-| Settimana | Attività |
+| Fase | Attività |
 | --- | --- |
-| 1 | Analisi dei requisiti, scelta del tema, disegno ER e UML, preparazione ambiente di lavoro |
-| 2 | Configurazione Flask, sistema di autenticazione, gestione utenti |
-| 3 | Implementazione CRUD delle ricette e delle categorie |
-| 4 | Ricerca/filter, preferiti, commenti opzionali |
-| 5 | Testing, correzioni bug, documentazione, preparazione consegna GitHub |
+| 1 | Analisi dei requisiti, schema architettura, setup ambiente (Ollama, venv, Flask) |
+| 2 | Backend: memoria conversazionale, agent loop con streaming |
+| 3 | Tool calling: web search, file, Python, PDF, Wikipedia |
+| 4 | Web UI: template HTML, streaming SSE, tab management, color picker |
+| 5 | Markdown rendering, persistenza sessioni, testing, documentazione, push su GitHub |
 
 ### 10.1 Gantt semplificato
 
 ```mermaid
 gantt
     dateFormat  YYYY-MM-DD
-    title Piano di progetto esempio
-    section Analisi
-    Requisiti e schema ER         :a1, 2026-04-15, 5d
-    Diagramma UML                  :a2, after a1, 3d
-    section Sviluppo
-    Autenticazione utente          :b1, after a2, 5d
-    CRUD ricette                   :b2, after b1, 6d
-    Filtri e ricerca               :b3, after b2, 4d
-    Preferiti e profilo            :b4, after b3, 4d
+    title Piano di progetto RaxeusAI
+    section Analisi e setup
+    Architettura e requisiti       :a1, 2026-04-09, 3d
+    Setup Ollama e Flask           :a2, after a1, 2d
+    section Backend
+    Memory e agent loop            :b1, after a2, 4d
+    Tool calling                   :b2, after b1, 4d
+    Persistenza sessioni           :b3, after b2, 3d
+    section Web UI
+    HTML e CSS base                :c1, after a2, 3d
+    Streaming SSE                  :c2, after c1, 4d
+    Tab e color picker             :c3, after c2, 3d
     section Rifinitura
-    Test e documentazione          :c1, after b4, 4d
-    Consegna su GitHub             :c2, after c1, 2d
+    Markdown rendering             :d1, after c3, 2d
+    Test e documentazione          :d2, after d1, 3d
+    Consegna su GitHub             :d3, after d2, 1d
 ```
-
-> Il Gantt è uno strumento utile per pianificare, ma in classe può bastare anche una tabella di milestone.
 
 ## 11. Suggerimenti per la consegna
 
-- Caricare il progetto su GitHub con una struttura chiara.
-- Tenere un file `README.md` con istruzioni di installazione e uso.
-- Usare `.gitignore` per escludere `__pycache__`, `.venv` e `instance/`.
-- Includere i diagrammi di progetto se sono stati realizzati.
+- Caricare il progetto su GitHub con struttura chiara.
+- Tenere un file `README.md` con istruzioni di installazione e avvio.
+- Usare `.gitignore` per escludere `venv/`, `__pycache__/`, `sessions/`.
+- Includere un file `requirements.txt` aggiornato.
 - Fare commit frequenti e significativi.
