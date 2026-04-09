@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import io
+import os
 from datetime import datetime
 
 try:
@@ -21,6 +22,12 @@ try:
     _REQUESTS_OK = True
 except ImportError:
     _REQUESTS_OK = False
+
+try:
+    from pypdf import PdfReader
+    _PYPDF_OK = True
+except ImportError:
+    _PYPDF_OK = False
 
 
 def web_search(query: str) -> str:
@@ -117,12 +124,67 @@ def get_datetime() -> str:
     return datetime.now().strftime("%A %d %B %Y, %H:%M:%S")
 
 
+def list_dir(path: str = ".") -> str:
+    try:
+        entries = sorted(os.listdir(path))
+        if not entries:
+            return "(directory vuota)"
+        return "\n".join(entries)
+    except FileNotFoundError:
+        return f"Directory non trovata: {path}"
+    except Exception as e:
+        return f"Errore: {e}"
+
+
+def append_file(path: str, content: str) -> str:
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(content)
+        return f"Contenuto aggiunto a: {path}"
+    except Exception as e:
+        return f"Errore: {e}"
+
+
+def read_pdf(path: str) -> str:
+    if not _PYPDF_OK:
+        return "Errore: libreria pypdf non installata."
+    try:
+        reader = PdfReader(path)
+        pages = [page.extract_text() or "" for page in reader.pages]
+        text = "\n".join(pages)
+        return text[:4000] if text.strip() else "(nessun testo estraibile)"
+    except FileNotFoundError:
+        return f"File non trovato: {path}"
+    except Exception as e:
+        return f"Errore: {e}"
+
+
+def wikipedia_search(query: str, lang: str = "it") -> str:
+    if not _REQUESTS_OK:
+        return "Errore: libreria requests non installata."
+    try:
+        url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{query.replace(' ', '_')}"
+        resp = requests.get(url, timeout=8)
+        if resp.status_code == 404:
+            return f"Nessuna pagina Wikipedia trovata per: {query}"
+        data = resp.json()
+        title = data.get("title", "")
+        extract = data.get("extract", "Nessun contenuto disponibile.")
+        return f"**{title}**\n\n{extract}"
+    except Exception as e:
+        return f"Errore Wikipedia: {e}"
+
+
 TOOLS = {
     "google_search": google_search,
     "web_search": web_search,
     "fetch_url": fetch_url,
     "read_file": read_file,
     "write_file": write_file,
+    "append_file": append_file,
+    "list_dir": list_dir,
+    "read_pdf": read_pdf,
+    "wikipedia_search": wikipedia_search,
     "run_python": run_python,
     "get_datetime": get_datetime,
 }
@@ -219,6 +281,64 @@ TOOL_SCHEMAS = [
             "name": "get_datetime",
             "description": "Restituisce la data e l'ora corrente.",
             "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_dir",
+            "description": "Elenca i file e le cartelle in una directory. Usalo per esplorare il filesystem prima di leggere o scrivere file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Percorso della directory (default: directory corrente)"}
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "append_file",
+            "description": "Aggiunge testo in fondo a un file esistente senza sovrascriverlo. Utile per log, diari, note progressive.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Percorso del file"},
+                    "content": {"type": "string", "description": "Testo da aggiungere in fondo al file"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_pdf",
+            "description": "Legge e restituisce il testo estratto da un file PDF. Usalo quando l'utente chiede di analizzare o riassumere un PDF.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Percorso del file PDF"}
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wikipedia_search",
+            "description": "Cerca su Wikipedia e restituisce il sommario della pagina. Usalo per definizioni, biografie, concetti storici o scientifici.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Titolo o argomento da cercare"},
+                    "lang": {"type": "string", "description": "Codice lingua Wikipedia (default: 'it' per italiano, 'en' per inglese)"},
+                },
+                "required": ["query"],
+            },
         },
     },
 ]
