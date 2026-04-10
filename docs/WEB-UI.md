@@ -24,7 +24,7 @@ python app.py
 
 ## Interfaccia
 
-**Topbar** — barra scura fissa in cima. Da sinistra: logo "Raxeus", campo di ricerca che filtra le tab mentre scrivi, tab delle chat aperte (max 5), pulsante `+` per aprire una nuova chat, pallino colorato tutto a destra.
+**Topbar** — barra scura fissa in cima. Da sinistra: logo "Raxeus", pulsante `ⓘ` (info), campo di ricerca che filtra le tab mentre scrivi, tab delle chat aperte (max 5), pulsante `+` per aprire una nuova chat, pallino colorato tutto a destra.
 
 **Area chat** — messaggi AI a sinistra (solo testo, niente bolla), messaggi utente a destra con bolla colorata. Durante i tool call (ricerche web, esecuzione Python, ecc.) compare uno spinner con "elaborazione..." — nessun dettaglio tecnico esposto.
 
@@ -56,6 +56,22 @@ Il pallino in alto a destra riflette il colore della chat attiva. Cliccandolo ap
 | Rosso scuro | `#3a1a1a` |
 | Ambra | `#2a2a18` |
 | Custom | color picker hex libero |
+
+---
+
+## Pulsante Info
+
+Cliccando `ⓘ` in topbar si apre un modal centrato con sfondo semi-trasparente. Contiene **2 card affiancate**, una per `AlbertoBruscoliniMain` (account personale) e una per `AlbertoBruscolini` (account scolastico).
+
+Ogni card mostra:
+- **Avatar** circolare recuperato da GitHub
+- **Username** e nome reale (se presente nel profilo)
+- **Bio** del profilo
+- **Numero di repo pubblici** e **follower**
+
+I dati vengono fetchati dalla GitHub API (`api.github.com/users/<username>`) al primo click e poi restano in cache per la sessione. Entrambe le card sono cliccabili e aprono il portfolio `AlbertoBruscoliniMain.github.io` in una nuova scheda.
+
+Il modal si chiude con `✕` o cliccando fuori dal riquadro.
 
 ---
 

@@ -110,6 +110,151 @@ html, body {
 
 #btn-new:hover { color: var(--text-dim); }
 
+#btn-info {
+  background: none;
+  border: none;
+  color: var(--text-dimmer);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+#btn-info:hover { color: var(--text-dim); }
+
+/* ── INFO MODAL ──────────────────────────────────────────────────────────── */
+
+#info-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#info-overlay.hidden { display: none; }
+
+#info-modal {
+  background: #161616;
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 28px 28px 24px;
+  width: 540px;
+  max-width: 92vw;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0,0,0,.8);
+}
+
+#info-cards {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.info-card {
+  flex: 1;
+  background: #111;
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s;
+}
+
+.info-card:hover { border-color: #444; }
+
+.info-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.info-card-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  flex-shrink: 0;
+  background: #222;
+}
+
+.info-card-user {
+  font-size: 11px;
+  color: var(--text-dimmer);
+}
+
+.info-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.info-card-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.info-card-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.info-card-stat {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-card-loading {
+  font-size: 12px;
+  color: var(--text-dimmer);
+  padding: 20px 0;
+  text-align: center;
+  width: 100%;
+}
+
+#info-close {
+  position: absolute;
+  top: 12px; right: 14px;
+  background: none;
+  border: none;
+  color: var(--text-dimmer);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#info-close:hover { color: var(--text-dim); }
+
+.info-label {
+  font-size: 10px;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+
+.info-link {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.info-link:hover { color: #fff; text-decoration: underline; }
+
 /* ── PALLINO COLORE ──────────────────────────────────────────────────────── */
 
 #color-dot-wrap {

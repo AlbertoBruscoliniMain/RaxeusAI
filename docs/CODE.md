@@ -219,7 +219,12 @@ python app.py
 
 SPA unica. Contiene solo il markup HTML strutturale — nessuna logica. Carica `style.css` e `app.js`. Il DOM viene popolato interamente da `app.js` a runtime.
 
-Struttura: `#topbar` (logo, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (textarea + pulsante invia).
+Struttura: `#topbar` (logo, `#btn-info`, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (textarea + pulsante invia) → `#info-overlay` (modal info, nascosto di default).
+
+**Elementi aggiunti:**
+- `#btn-info` — pulsante `ⓘ` accanto al logo, apre il modal info
+- `#info-overlay` — overlay a schermo intero con sfondo semi-trasparente
+- `#info-modal` — riquadro centrato con `#info-close` (✕) e `#info-cards` (contenitore card popolato da JS)
 
 ---
 
@@ -228,6 +233,16 @@ Struttura: `#topbar` (logo, ricerca, tab, pallino colore) → `#chat-area` (mess
 Tema scuro completo. Usa variabili CSS (`--bg`, `--bubble-bg`, `--bubble-text`, ecc.) per mantenere i colori coerenti e permettere futuri temi.
 
 Elementi principali: `#topbar`, `.tab`, `.tab.active`, `.bubble-user`, `.bubble-ai`, `.spinner`, `#color-dot`, `#color-picker`, `.preset-dot`.
+
+**Elementi aggiunti:**
+- `#btn-info` — stesso stile di `#btn-new` (niente bordo, colore dimmer, hover)
+- `#info-overlay` / `#info-modal` — overlay fisso z-index 300, modal `#161616` con box-shadow
+- `.info-card` — flex card con `background: #111`, bordo sottile, hover che schiarisce il bordo
+- `.info-card-header` — riga avatar + testo (username + nome reale)
+- `.info-card-avatar` — immagine circolare 38×38px
+- `.info-card-desc` — bio in testo dim, `flex: 1` per occupare lo spazio disponibile
+- `.info-card-stats` — riga inferiore con repo e follower in font 10px
+- `.info-card-loading` — testo centrato mostrato durante il fetch
 
 ---
 
@@ -243,6 +258,11 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 | Color picker | `setColor`, `loadColor`, `applyBubbleColor`, `updateColorDot`, `buildPresets` |
 
 **Persistenza locale:** i messaggi di ogni chat sono in `localStorage` con chiave `chat_<session_id>`. Il colore bolla è in `bubble_color_<session_id>`. Al ricaricamento tutto viene ripristinato.
+
+**Elementi aggiunti:**
+- `btnInfo`, `infoOverlay`, `infoClose` — DOM refs per il modal info
+- `loadInfoCards()` — fetch parallelo dei profili `AlbertoBruscoliniMain` e `AlbertoBruscolini` via `api.github.com/users/<username>`; costruisce le card dinamicamente e le inserisce in `#info-cards`; usa il flag `infoCardsLoaded` per evitare fetch ripetuti
+- Event listeners: `btnInfo` → rimuove `.hidden` dall'overlay e chiama `loadInfoCards()`; `infoClose` → aggiunge `.hidden`; click sull'overlay stesso → chiude se il target è l'overlay (non la card)
 
 **Max 5 tab:** aprire la sesta chat chiude automaticamente la prima (la più vecchia).
 

@@ -26,6 +26,9 @@ const colorDot    = document.getElementById('color-dot');
 const colorPicker = document.getElementById('color-picker');
 const presetsEl   = document.getElementById('presets');
 const customColor = document.getElementById('custom-color');
+const btnInfo     = document.getElementById('btn-info');
+const infoOverlay = document.getElementById('info-overlay');
+const infoClose   = document.getElementById('info-close');
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 
@@ -290,6 +293,11 @@ document.addEventListener('click', e => {
 // ── EVENTI INPUT ──────────────────────────────────────────────────────────────
 
 btnNew.addEventListener('click', newChat);
+btnInfo.addEventListener('click', () => { infoOverlay.classList.remove('hidden'); loadInfoCards(); });
+infoClose.addEventListener('click', () => infoOverlay.classList.add('hidden'));
+infoOverlay.addEventListener('click', e => {
+  if (e.target === infoOverlay) infoOverlay.classList.add('hidden');
+});
 btnSend.addEventListener('click', sendMessage);
 
 msgInput.addEventListener('keydown', e => {
@@ -302,6 +310,51 @@ msgInput.addEventListener('input', () => {
 });
 
 searchEl.addEventListener('input', renderTabs);
+
+// ── INFO CARDS ────────────────────────────────────────────────────────────────
+
+const PORTFOLIO_URL = 'https://AlbertoBruscoliniMain.github.io';
+const GH_ACCOUNTS = ['AlbertoBruscoliniMain', 'AlbertoBruscolini'];
+let infoCardsLoaded = false;
+
+async function loadInfoCards() {
+  if (infoCardsLoaded) return;
+  const container = document.getElementById('info-cards');
+  container.innerHTML = '<div class="info-card-loading">caricamento...</div>';
+
+  try {
+    const profiles = await Promise.all(
+      GH_ACCOUNTS.map(u => fetch(`https://api.github.com/users/${u}`).then(r => r.json()))
+    );
+
+    container.innerHTML = '';
+    profiles.forEach(p => {
+      const card = document.createElement('a');
+      card.className = 'info-card';
+      card.href = PORTFOLIO_URL;
+      card.target = '_blank';
+      card.rel = 'noopener';
+      card.innerHTML = `
+        <div class="info-card-header">
+          <img class="info-card-avatar" src="${p.avatar_url}" alt="avatar">
+          <div>
+            <div class="info-card-name">${p.login}</div>
+            ${p.name ? `<div class="info-card-user">${p.name}</div>` : ''}
+          </div>
+        </div>
+        ${p.bio ? `<div class="info-card-desc">${p.bio}</div>` : ''}
+        <div class="info-card-stats">
+          <span class="info-card-stat">📦 ${p.public_repos} repo</span>
+          <span class="info-card-stat">👥 ${p.followers} follower</span>
+        </div>`;
+      container.appendChild(card);
+    });
+
+    infoCardsLoaded = true;
+  } catch {
+    container.innerHTML = '<div class="info-card-loading">impossibile caricare i dati</div>';
+  }
+}
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 
