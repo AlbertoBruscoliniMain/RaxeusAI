@@ -9,20 +9,35 @@
 
 ```
 RaxeusAI/
-├── config.py           → configurazione centralizzata (modello, URL, personalità)
-├── memory.py           → gestione cronologia conversazione + tool messages
-├── agent.py            → loop agente con streaming, tool calling e chat_stream per la web UI
-├── tools.py            → funzioni eseguibili dall'AI (web, file, PDF, Wikipedia, ora)
-├── sessions.py         → salvataggio e caricamento sessioni su file JSON
-├── main.py             → loop terminale (ancora funzionante)
-├── app.py              → server Flask per la web UI
+├── config.py               → configurazione centralizzata (modello, URL, personalità)
+├── memory.py               → gestione cronologia conversazione + tool messages
+├── agent.py                → loop agente con streaming, tool calling e chat_stream per la web UI
+├── tools.py                → funzioni eseguibili dall'AI (web, file, PDF, Wikipedia, ora)
+├── sessions.py             → salvataggio e caricamento sessioni su file JSON
+├── main.py                 → loop terminale (ancora funzionante)
+├── app.py                  → server Flask: chat AI + modulo RaxeusLyric
+│
+├── lyric_downloader.py     → download audio da YouTube via yt-dlp
+├── lyric_transcriber.py    → trascrizione Whisper + forced alignment testi
+├── lyric_formatter.py      → salvataggio LRC, gestione playlist JSON, cache
+├── lyric_fetcher.py        → recupero testi da lyrics.ovh API
+├── lyric_song_finder.py    → ricerca metadati canzone via iTunes API
+│
 ├── templates/
-│   └── index.html      → SPA: tutto il markup dell'interfaccia web
+│   ├── index.html          → SPA chat: tutto il markup dell'interfaccia web
+│   └── lyric.html          → pagina RaxeusLyric: player + testi sincronizzati
 ├── static/
-│   ├── style.css       → tema scuro, layout completo
-│   └── app.js          → logica tab, streaming SSE, color picker, localStorage
-├── requirements.txt    → dipendenze Python
-└── venv/               → ambiente virtuale (prompt: "Raxeus")
+│   ├── style.css           → tema scuro, layout completo
+│   ├── app.js              → logica tab, streaming SSE, color picker, localStorage + bottone RaxeusLyric
+│   └── logo.png            → icona/logo Raxeus
+│
+├── lyrics_output/          → generata a runtime
+│   ├── playlist.json       → indice di tutte le canzoni elaborate
+│   ├── *.lrc               → testi sincronizzati in formato LRC
+│   ├── audio/              → file mp3 delle canzoni
+│   └── covers/             → copertine album
+├── requirements.txt        → dipendenze Python
+└── venv/                   → ambiente virtuale (prompt: "Raxeus")
 ```
 
 ---
@@ -191,11 +206,94 @@ Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione cor
 
 ---
 
+## lyric_downloader.py
+
+Scarica l'audio di una canzone da YouTube tramite **yt-dlp**.
+
+```python
+def download_audio(query: str) -> tuple[str, dict]
+```
+
+Cerca `ytsearch1:<query>` su YouTube, scarica solo la traccia audio nel miglior formato disponibile e la converte in mp3 a 192kbps via FFmpeg postprocessor. L'output va in `temp_audio/` (cartella temporanea dentro RaxeusAI). Restituisce `(file_path, metadata)` dove metadata contiene artista, titolo e URL thumbnail estratti dai metadati YouTube.
+
+---
+
+## lyric_transcriber.py
+
+Trascrive l'audio e sincronizza i testi con i timestamp. È il modulo più complesso del progetto.
+
+```python
+def get_transcription(file_path: str, hint_lyrics: str = None) -> list[dict]
+```
+
+Restituisce una lista di segmenti `{"start": float, "end": float, "text": str}`.
+
+**Flusso:**
+1. Carica il modello `WhisperModel("small", device="cpu", compute_type="int8")` — modello small quantizzato, ~500MB RAM
+2. Trascrive con `word_timestamps=True` per ottenere timestamp per ogni parola
+3. Se `hint_lyrics` è fornito (testo ufficiale), chiama `_forced_align()` invece di usare la trascrizione grezza
+
+**`_forced_align(lines, whisper_segs)`:** algoritmo di forced alignment a due fasi:
+- `_collect_whisper_words` — estrae tutte le parole Whisper con i loro timestamp
+- `_collect_lyric_words` — tokenizza le righe del testo, tenendo traccia dell'indice riga e posizione nella riga
+- `_semi_global_align` — programmazione dinamica con matrice score n×m; i gap nel testo lirico costano `-1.15`, i gap Whisper costano `-0.45` (Whisper può aggiungere parole extra), i mismatch costano `-1.8`, i match esatti valgono `+2.6`
+- Traceback della matrice → lista di coppie `(lyric_word_idx, whisper_word_idx)` allineate
+- `_fill_missing_times` — interpolazione lineare per righe senza match diretto
+
+**`_word_score(a, b)`:** valuta la somiglianza tra due parole normalizzate. Usa `difflib.SequenceMatcher` per coppie lunghe, con soglie 0.9 (strong) e 0.8 (weak).
+
+---
+
+## lyric_formatter.py
+
+Gestisce il formato LRC, la playlist JSON e la cache locale.
+
+```python
+def save_as_lrc(segments, song_title) -> str          # salva file .lrc, ritorna il path
+def update_playlist(title, lrc_path, audio, cover)    # aggiunge/aggiorna entry in playlist.json
+def get_playlist_entry(query) -> dict | None          # cerca entry per titolo (fuzzy: "Title -- Artist")
+def check_cache(query) -> list | None                 # ritorna segmenti se la canzone è in cache
+def load_from_lrc(lrc_path) -> list                   # parse di un .lrc → lista segmenti
+```
+
+**Formato LRC:** ogni riga del testo è preceduta da `[mm:ss.xx]`. Il file include header `[ti:]` e `[by:AutoLyric AI]`.
+
+**`_title_matches(stored, query)`:** corrispondenza fuzzy — considera match sia `"Imagine"` che `"Imagine -- John Lennon"` per la query `"Imagine"`.
+
+**Output dir:** `lyrics_output/` relativa a `__file__` (dentro RaxeusAI dopo la copia del modulo).
+
+---
+
+## lyric_fetcher.py
+
+Recupera il testo ufficiale di una canzone da **lyrics.ovh** (API pubblica, gratuita, senza chiave).
+
+```python
+def fetch_lyrics(artist: str, title: str) -> str | None
+```
+
+Prova più combinazioni artista/titolo in ordine: `(artista, titolo)` → `(artista_breve, titolo)` → `(titolo, artista)` (per query del tipo "Canzone - Artista"). `clean_title()` rimuove suffissi YouTube come `(Official Video)`, `[Lyrics]`, `(Remaster 2021)`, ecc. I marcatori di sezione (`[Verse 1]`, `[Chorus]`, ecc.) vengono rimossi dal testo restituito.
+
+---
+
+## lyric_song_finder.py
+
+Identifica titolo canonico, artista e copertina tramite **iTunes Search API**.
+
+```python
+def find_song(query: str) -> dict | None
+# ritorna {"title": str, "artist": str, "artwork_url": str} oppure None
+```
+
+Richiesta a `https://itunes.apple.com/search` con `entity=song&limit=1`. La copertina viene upgradrata automaticamente da 100×100px a 512×512px sostituendo la dimensione nell'URL. Timeout 7 secondi, nessuna dipendenza extra (usa solo `urllib` della stdlib).
+
+---
+
 ## app.py
 
 Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, Memory]` con una `Memory` attiva per ogni conversazione aperta nel browser.
 
-### Endpoint
+### Endpoint chat (originali)
 
 | Metodo | Path | Descrizione |
 |---|---|---|
@@ -206,11 +304,47 @@ Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, 
 
 **`_get_memory(session_id)`:** recupera la Memory dal dizionario; se non esiste la crea, e se esiste un file sessione corrispondente lo carica automaticamente da disco.
 
+### Endpoint RaxeusLyric (aggiunti)
+
+| Metodo | Path | Descrizione |
+|---|---|---|
+| `GET` | `/lyric` | Serve `templates/lyric.html` |
+| `GET` | `/lyric/api/process?query=` | Pipeline completa in SSE: ricerca → testo → download → trascrizione |
+| `GET` | `/lyric/api/playlist` | Restituisce la playlist JSON con copertine validate |
+| `GET` | `/lyric/api/load?title=` | Carica canzone dalla cache (segmenti + audio) |
+| `POST` | `/lyric/api/delete` | Elimina canzone: rimuove LRC, mp3 e copertina + aggiorna playlist |
+| `GET` | `/lyric/api/audio/<filename>` | Serve il file mp3 con `conditional=True` (supporto Range per seek) |
+| `GET` | `/lyric/api/cover/<filename>` | Serve la copertina con mimetype auto-rilevato |
+
+**Costanti di percorso:**
+```python
+_LYRIC_BASE   = os.path.dirname(__file__)          # radice RaxeusAI/
+_LYRIC_OUT    = _LYRIC_BASE / "lyrics_output"      # output generale
+_LYRIC_AUDIO  = _LYRIC_OUT  / "audio"             # mp3
+_LYRIC_COVERS = _LYRIC_OUT  / "covers"            # copertine
+```
+
+**`/lyric/api/process` — eventi SSE emessi:**
+
+| Evento `type` | Payload | Quando |
+|---|---|---|
+| `progress` | `message: str` | Ogni step della pipeline |
+| `song_info` | `display_title: str` | Dopo risoluzione iTunes |
+| `lyrics_found` | `lines: list[str]` | Quando il testo ufficiale è trovato |
+| `error` | `message: str` | In caso di errore bloccante |
+| `done` | `segments, audio, cover, cached, display_title` | Pipeline completata |
+
+**Helper interni:**
+- `_download_cover(url, title)` — scarica la copertina, deduplicandola per stem (rimuove versioni precedenti con estensione diversa)
+- `_ensure_cover(entry)` — verifica che la copertina esista su disco; se manca, la ri-scarica da iTunes; usato in `/lyric/api/playlist` per riparare la libreria
+- `_split_display_title(dt)` — separa `"Titolo -- Artista"` in `(titolo, artista)`, fallback su `" - "`
+
 **Avvio:**
 ```bash
 source venv/bin/activate
 python app.py
-# apri http://localhost:5000
+# chat AI:    http://localhost:5000
+# RaxeusLyric: http://localhost:5000/lyric
 ```
 
 ---
@@ -225,6 +359,23 @@ Struttura: `#topbar` (logo, `#btn-info`, ricerca, tab, pallino colore) → `#cha
 - `#btn-info` — pulsante `ⓘ` accanto al logo, apre il modal info
 - `#info-overlay` — overlay a schermo intero con sfondo semi-trasparente
 - `#info-modal` — riquadro centrato con `#info-close` (✕) e `#info-cards` (contenitore card popolato da JS)
+
+## templates/lyric.html
+
+Pagina autonoma per il modulo RaxeusLyric. Struttura a tre zone:
+
+- **Header** — logo Raxeus cliccabile (torna a `/`), barra di ricerca, bottone "← Chat"
+- **Body** — sidebar sinistra (libreria canzoni) + area centrale (testi)
+- **Player bar** — nascosta di default, appare quando l'audio è disponibile
+
+**Funzionalità JavaScript inline** (nessun file esterno oltre a `lyric.html` stesso):
+- `doSearch()` — apre un `EventSource` su `/lyric/api/process?query=` e gestisce tutti i tipi di evento SSE
+- `renderLyrics(segs)` / `renderLyricsPreview(lines)` — due modalità: preview senza timestamp (durante il download) e testo finale con timestamp cliccabili
+- `syncLyrics(ct)` — chiamata a ogni `timeupdate` dell'audio; trova il segmento attivo con ricerca lineare dal fondo, aggiorna classi `.active` / `.past` e scrolla automaticamente (inibito per 2.5s se l'utente ha scrollato manualmente)
+- `seek(e)` — calcola la posizione relativa del click sulla barra di avanzamento e salta l'audio al timestamp corrispondente
+- `refreshPlaylist()` / `loadFromPlaylist()` / `deleteSong()` — CRUD completo della libreria tramite le API `/lyric/api/*`
+
+Tutte le chiamate API usano il prefisso `/lyric/api/` per non collidere con le route della chat.
 
 ---
 
@@ -263,6 +414,7 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 - `btnInfo`, `infoOverlay`, `infoClose` — DOM refs per il modal info
 - `loadInfoCards()` — fetch parallelo dei profili `AlbertoBruscoliniMain` e `AlbertoBruscolini` via `api.github.com/users/<username>`; costruisce le card dinamicamente e le inserisce in `#info-cards`; usa il flag `infoCardsLoaded` per evitare fetch ripetuti
 - Event listeners: `btnInfo` → rimuove `.hidden` dall'overlay e chiama `loadInfoCards()`; `infoClose` → aggiunge `.hidden`; click sull'overlay stesso → chiude se il target è l'overlay (non la card)
+- **Bottone RaxeusLyric** — iniettato via IIFE alla fine del file; crea un `<a href="/lyric" target="_blank">` con stile inline completo e lo inserisce nella topbar tramite `insertBefore(btn, colorWrap)`, prima del pallino colore. Hover gestito via `mouseenter`/`mouseleave` per non toccare `style.css`.
 
 **Max 5 tab:** aprire la sesta chat chiude automaticamente la prima (la più vecchia).
 
@@ -326,9 +478,23 @@ googlesearch-python
 requests
 beautifulsoup4
 pypdf
+flask
 ```
 
-**Modifiche:** aggiunte `duckduckgo-search`, `googlesearch-python`, `requests` e `beautifulsoup4` per ricerca web e fetch pagine. Aggiunta `pypdf` per la lettura di file PDF. Aggiunta `flask` per la web UI.
+**Dipendenze originali:** `duckduckgo-search`, `googlesearch-python`, `requests`, `beautifulsoup4` per ricerca web e fetch pagine; `pypdf` per PDF; `flask` per la web UI.
+
+**Dipendenze aggiunte per RaxeusLyric** (installate nel venv, non ancora in requirements.txt):
+
+| Pacchetto | Versione | Scopo |
+|---|---|---|
+| `yt-dlp` | 2026.3.17 | Download audio da YouTube |
+| `faster-whisper` | 1.2.1 | Trascrizione audio con word timestamps |
+| `ctranslate2` | 4.7.1 | Engine C++ per inferenza Whisper ottimizzata |
+| `onnxruntime` | 1.24.4 | Dipendenza di faster-whisper per VAD |
+| `huggingface-hub` | 1.10.2 | Download automatico pesi del modello Whisper |
+| `tokenizers` | 0.22.2 | Tokenizzazione (dipendenza faster-whisper) |
+| `av` | 17.0.0 | Lettura file audio (binding PyAV/FFmpeg) |
+| `numpy` | 2.4.4 | Array numerici per il processing audio |
 
 ---
 

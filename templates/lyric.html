@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>RaxeusLyric</title>
+  <link rel="icon" type="image/png" href="/static/logo.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d0d;
+      --surface:     #111;
+      --surface2:    #161616;
+      --surface3:    #1e1e1e;
+      --border:      #1a1a1a;
+      --border2:     #252525;
+      --accent:      #c0392b;
+      --accent-hi:   #e74c3c;
+      --accent-glow: rgba(231,76,60,0.15);
+      --text:        #c0c0c0;
+      --text-mid:    #666;
+      --text-dim:    #333;
+      --green:       #27ae60;
+      --red:         #e74c3c;
+      --player-h:    72px;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+    }
+
+    /* ─── LOADING BAR ─────────────────── */
+    #loading-bar {
+      position: fixed; top: 0; left: 0; height: 2px; width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+      transition: width 0.4s ease, opacity 0.3s;
+      z-index: 999;
+    }
+
+    /* ─── HEADER ──────────────────────── */
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 14px;
+      height: 44px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      text-decoration: none;
+    }
+
+    .logo-wrap img { height: 24px; width: auto; display: block; }
+
+    .logo-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+    .logo-name em { color: var(--text-mid); font-style: normal; font-weight: 400; }
+
+    .divider {
+      width: 1px;
+      height: 18px;
+      background: var(--border2);
+      flex-shrink: 0;
+    }
+
+    .search-wrap {
+      flex: 1;
+      display: flex;
+      gap: 7px;
+      max-width: 560px;
+    }
+
+    .search-wrap input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: 5px 10px;
+      color: var(--text);
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .search-wrap input:focus { border-color: #444; }
+    .search-wrap input::placeholder { color: var(--text-dim); }
+
+    .btn-search {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    .btn-search:hover { color: #fff; border-color: #444; }
+    .btn-search:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .back-link {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--text-mid);
+      text-decoration: none;
+      padding: 3px 10px;
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      transition: color .15s, border-color .15s;
+    }
+    .back-link:hover { color: var(--text); border-color: #444; }
+
+    /* ─── BODY ────────────────────────── */
+    .body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ─── SIDEBAR ─────────────────────── */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .sidebar-title {
+      padding: 12px 14px 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    #playlist-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 6px;
+    }
+    #playlist-list::-webkit-scrollbar { width: 3px; }
+    #playlist-list::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+
+    .pl-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 14px;
+      cursor: pointer;
+      border-left: 2px solid transparent;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .pl-item:hover { background: var(--surface2); }
+    .pl-item.active { background: var(--surface2); border-left-color: var(--accent-hi); }
+
+    .pl-icon {
+      width: 30px; height: 30px;
+      border-radius: 4px;
+      background: var(--surface3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+      color: var(--text-mid);
+      overflow: hidden;
+      border: 1px solid var(--border2);
+    }
+    .pl-cover { display: block; object-fit: cover; }
+
+    .pl-info { min-width: 0; }
+    .pl-name {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pl-date { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+
+    .pl-empty {
+      padding: 24px 14px;
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .pl-delete {
+      margin-left: auto;
+      flex-shrink: 0;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      padding: 3px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s;
+    }
+    .pl-item:hover .pl-delete { opacity: 1; }
+    .pl-delete:hover { color: var(--red); }
+
+    /* ─── LYRICS AREA ─────────────────── */
+    .lyrics-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .lyrics-topbar {
+      padding: 10px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 50px;
+      flex-shrink: 0;
+    }
+
+    #song-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 10px;
+      color: var(--text-mid);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .status-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+    }
+    .status-dot.spin  { background: var(--accent-hi); animation: blink 0.8s infinite; }
+    .status-dot.ok    { background: var(--green); }
+    .status-dot.cache { background: #60a5fa; }
+    .status-dot.err   { background: var(--red); }
+
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+    #lyrics-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 12vw 36px;
+      scroll-behavior: smooth;
+    }
+    #lyrics-scroll::-webkit-scrollbar { width: 3px; }
+    #lyrics-scroll::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      color: var(--text-dim);
+      user-select: none;
+    }
+    .empty-icon { font-size: 2rem; opacity: 0.4; }
+    .empty-text { font-size: 12px; }
+
+    .lyric-line {
+      font-size: 1.25rem;
+      font-weight: 500;
+      line-height: 1.6;
+      color: var(--text-dim);
+      padding: 6px 10px;
+      border-radius: 5px;
+      border-left: 2px solid transparent;
+      cursor: pointer;
+      transition: color 0.25s, font-size 0.25s, background 0.2s, border-color 0.25s, padding-left 0.25s;
+      position: relative;
+    }
+    .lyric-line:hover { color: var(--text-mid); background: var(--surface2); }
+
+    .lyric-line .ts-label {
+      position: absolute;
+      right: 10px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 9px;
+      color: var(--text-dim);
+      opacity: 0;
+      transition: opacity 0.15s;
+      font-weight: 400;
+    }
+    .lyric-line:hover .ts-label { opacity: 1; }
+
+    .lyric-line.past { color: #555; }
+
+    .lyric-line.active {
+      color: var(--text);
+      font-size: 1.45rem;
+      font-weight: 700;
+      background: var(--accent-glow);
+      border-left-color: var(--accent-hi);
+      padding-left: 16px;
+    }
+
+    /* ─── PLAYER BAR ──────────────────── */
+    #player-bar {
+      flex-shrink: 0;
+      height: var(--player-h);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: none;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+    }
+    #player-bar.visible { display: flex; }
+
+    .play-btn {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: border-color .15s, color .15s;
+    }
+    .play-btn:hover { border-color: #555; color: #fff; }
+
+    .player-track {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .player-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    #player-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-times {
+      font-size: 10px;
+      color: var(--text-mid);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .progress-track {
+      position: relative;
+      height: 3px;
+      background: var(--surface3);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: height 0.15s;
+    }
+    .progress-track:hover { height: 5px; }
+
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      background: var(--accent-hi);
+      border-radius: 2px;
+      pointer-events: none;
+      transition: width 0.1s linear;
+    }
+
+    .progress-thumb {
+      position: absolute;
+      top: 50%; right: 0;
+      transform: translate(50%, -50%);
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--accent-hi);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .progress-track:hover .progress-thumb { opacity: 1; }
+
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      #lyrics-scroll { padding: 20px 16px 28px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="loading-bar"></div>
+
+<header>
+  <a class="logo-wrap" href="/" title="Torna alla chat">
+    <img src="/static/logo.png" alt="Raxeus">
+    <span class="logo-name">Raxeus<em>Lyric</em></span>
+  </a>
+  <div class="divider"></div>
+  <div class="search-wrap">
+    <input id="search-input" type="text" placeholder="Cerca una canzone… es: Imagine - John Lennon"/>
+    <button class="btn-search" id="search-btn">Genera</button>
+  </div>
+  <a class="back-link" href="/">← Chat</a>
+</header>
+
+<div class="body">
+
+  <aside class="sidebar">
+    <div class="sidebar-title">Libreria</div>
+    <div id="playlist-list">
+      <div class="pl-empty">Nessun testo salvato.<br>Cerca una canzone per iniziare.</div>
+    </div>
+  </aside>
+
+  <div class="lyrics-area">
+    <div class="lyrics-topbar">
+      <div id="song-name">—</div>
+      <div class="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">In attesa</span>
+      </div>
+    </div>
+    <div id="lyrics-scroll">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">♪</div>
+        <div class="empty-text">Cerca una canzone per vedere i testi sincronizzati</div>
+      </div>
+      <div id="lyrics-container"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="player-bar">
+  <button class="play-btn" id="play-pause-btn" title="Play / Pausa">&#9654;</button>
+  <div class="player-track">
+    <div class="player-meta">
+      <div id="player-title">—</div>
+      <div class="player-times"><span id="time-cur">0:00</span> / <span id="time-tot">0:00</span></div>
+    </div>
+    <div class="progress-track" id="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+      <div class="progress-thumb" id="progress-thumb"></div>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-el" preload="auto"></audio>
+
+<script>
+  const searchInput   = document.getElementById('search-input');
+  const searchBtn     = document.getElementById('search-btn');
+  const songName      = document.getElementById('song-name');
+  const statusDot     = document.getElementById('status-dot');
+  const statusText    = document.getElementById('status-text');
+  const lyricsScroll  = document.getElementById('lyrics-scroll');
+  const lyricsCont    = document.getElementById('lyrics-container');
+  const emptyState    = document.getElementById('empty-state');
+  const playerBar     = document.getElementById('player-bar');
+  const playPauseBtn  = document.getElementById('play-pause-btn');
+  const playerTitle   = document.getElementById('player-title');
+  const progressTrack = document.getElementById('progress-track');
+  const progressFill  = document.getElementById('progress-fill');
+  const progressThumb = document.getElementById('progress-thumb');
+  const timeCur       = document.getElementById('time-cur');
+  const timeTot       = document.getElementById('time-tot');
+  const loadingBar    = document.getElementById('loading-bar');
+  const playlistList  = document.getElementById('playlist-list');
+  const audioEl       = document.getElementById('audio-el');
+
+  let segments      = [];
+  let lastActiveIdx = -1;
+  let userScrolling = false;
+  let scrollTimer;
+  let currentTitle  = '';
+
+  function barSet(w)  { loadingBar.style.width = w; loadingBar.style.opacity = '1'; }
+  function barDone()  {
+    loadingBar.style.width = '100%';
+    setTimeout(() => { loadingBar.style.opacity = '0'; }, 300);
+    setTimeout(() => { loadingBar.style.width = '0'; loadingBar.style.opacity = '1'; }, 650);
+  }
+
+  function setStatus(msg, type) {
+    statusText.textContent = msg;
+    statusDot.className = 'status-dot' + (type ? ' ' + type : '');
+  }
+
+  function fmt(s) {
+    if (!s || isNaN(s)) return '0:00';
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2,'0')}`;
+  }
+
+  function coverSrc(filename) {
+    return `/lyric/api/cover/${encodeURIComponent(filename)}`;
+  }
+
+  function createFallbackIcon() {
+    const icon = document.createElement('div');
+    icon.className = 'pl-icon';
+    icon.textContent = '♪';
+    return icon;
+  }
+
+  function createPlaylistIcon(item) {
+    if (!item.cover) return createFallbackIcon();
+    const img = document.createElement('img');
+    img.className = 'pl-icon pl-cover';
+    img.src = coverSrc(item.cover);
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', () => { img.replaceWith(createFallbackIcon()); }, { once: true });
+    return img;
+  }
+
+  searchBtn.addEventListener('click', doSearch);
+  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  function doSearch() {
+    const q = searchInput.value.trim();
+    if (!q) return;
+    setStatus('Connessione…', 'spin');
+    barSet('10%');
+    searchBtn.disabled = true;
+    lastActiveIdx = -1;
+    lyricsCont.innerHTML = '';
+    emptyState.style.display = 'none';
+    songName.textContent = q;
+
+    const es = new EventSource(`/lyric/api/process?query=${encodeURIComponent(q)}`);
+
+    es.onmessage = e => {
+      const d = JSON.parse(e.data);
+      if (d.type === 'progress') { setStatus(d.message, 'spin'); barSet('40%'); }
+      if (d.type === 'song_info') { currentTitle = d.display_title; songName.textContent = d.display_title; playerTitle.textContent = d.display_title; barSet('55%'); }
+      if (d.type === 'lyrics_found') { emptyState.style.display = 'none'; renderLyricsPreview(d.lines); setStatus('Testo trovato — download audio...', 'ok'); barSet('70%'); }
+      if (d.type === 'error') { setStatus(d.message, 'err'); barDone(); searchBtn.disabled = false; es.close(); }
+      if (d.type === 'done') {
+        es.close(); searchBtn.disabled = false; barDone();
+        const title = d.display_title || currentTitle || q;
+        loadSong(title, d.segments, d.audio, d.cached);
+        refreshPlaylist(); highlightPlaylist(title);
+      }
+    };
+
+    es.onerror = () => { setStatus('Errore di connessione', 'err'); barDone(); searchBtn.disabled = false; es.close(); };
+  }
+
+  function loadSong(title, segs, audioFile, cached) {
+    segments = segs; lastActiveIdx = -1;
+    songName.textContent = title; playerTitle.textContent = title;
+    setStatus(cached ? 'Dalla cache' : 'Trascritto', cached ? 'cache' : 'ok');
+    renderLyrics(segs);
+    audioEl.pause(); audioEl.src = '';
+    if (audioFile) {
+      audioEl.src = `/lyric/api/audio/${encodeURIComponent(audioFile)}`;
+      audioEl.load(); playerBar.classList.add('visible'); updatePlayBtn();
+    } else {
+      playerBar.classList.remove('visible');
+    }
+  }
+
+  function renderLyrics(segs) {
+    emptyState.style.display = 'none'; lyricsCont.innerHTML = '';
+    segs.forEach((seg, i) => {
+      const d = document.createElement('div');
+      d.className = 'lyric-line'; d.id = `l${i}`;
+      d.innerHTML = `${escHtml(seg.text)}<span class="ts-label">${fmt(seg.start)}</span>`;
+      d.addEventListener('click', () => { if (!audioEl.src) return; audioEl.currentTime = seg.start; audioEl.play(); });
+      lyricsCont.appendChild(d);
+    });
+    lyricsScroll.scrollTop = 0;
+  }
+
+  function renderLyricsPreview(lines) {
+    lyricsCont.innerHTML = '';
+    lines.forEach((text, i) => {
+      const d = document.createElement('div');
+      d.className = 'lyric-line'; d.id = `l${i}`; d.textContent = text;
+      lyricsCont.appendChild(d);
+    });
+    lyricsScroll.scrollTop = 0;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  lyricsScroll.addEventListener('scroll', () => {
+    userScrolling = true; clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => { userScrolling = false; }, 2500);
+  });
+
+  function syncLyrics(ct) {
+    let active = -1;
+    for (let i = segments.length - 1; i >= 0; i--) {
+      if (segments[i].start <= ct) { active = i; break; }
+    }
+    if (active === lastActiveIdx) return;
+    lastActiveIdx = active;
+    document.querySelectorAll('.lyric-line').forEach((el, i) => {
+      el.classList.remove('active', 'past');
+      if (i < active) el.classList.add('past');
+      else if (i === active) el.classList.add('active');
+    });
+    if (active >= 0 && !userScrolling) {
+      const line = document.getElementById(`l${active}`);
+      if (line) line.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  audioEl.addEventListener('timeupdate', () => {
+    const ct = audioEl.currentTime, dur = audioEl.duration || 0, pct = dur ? (ct / dur) * 100 : 0;
+    progressFill.style.width = pct + '%'; progressThumb.style.left = pct + '%';
+    timeCur.textContent = fmt(ct); syncLyrics(ct);
+  });
+
+  audioEl.addEventListener('loadedmetadata', () => { timeTot.textContent = fmt(audioEl.duration); });
+  audioEl.addEventListener('play',  updatePlayBtn);
+  audioEl.addEventListener('pause', updatePlayBtn);
+  audioEl.addEventListener('ended', () => { audioEl.currentTime = 0; updatePlayBtn(); });
+
+  playPauseBtn.addEventListener('click', () => {
+    if (!audioEl.src) return;
+    audioEl.paused ? audioEl.play() : audioEl.pause();
+  });
+
+  function updatePlayBtn() {
+    playPauseBtn.innerHTML = audioEl.paused ? '&#9654;' : '&#9646;&#9646;';
+  }
+
+  progressTrack.addEventListener('click', seek);
+  progressTrack.addEventListener('mousedown', e => {
+    seek(e);
+    const mm = ev => seek(ev);
+    const up = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', mm); window.addEventListener('mouseup', up);
+  });
+
+  function seek(e) {
+    if (!audioEl.duration) return;
+    const r = progressTrack.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    audioEl.currentTime = pct * audioEl.duration;
+  }
+
+  function refreshPlaylist() {
+    fetch('/lyric/api/playlist').then(r => r.json()).then(items => {
+      if (!items.length) {
+        playlistList.innerHTML = '<div class="pl-empty">Nessun testo salvato.<br>Cerca una canzone per iniziare.</div>';
+        return;
+      }
+      playlistList.innerHTML = '';
+      [...items].reverse().forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'pl-item'; el.dataset.title = item.title;
+        el.appendChild(createPlaylistIcon(item));
+        el.insertAdjacentHTML('beforeend', `
+          <div class="pl-info">
+            <div class="pl-name" title="${escHtml(item.title)}">${escHtml(item.title)}</div>
+            <div class="pl-date">${item.added}</div>
+          </div>
+          <button class="pl-delete" title="Elimina">✕</button>`);
+        el.addEventListener('click', () => loadFromPlaylist(item.title, el));
+        el.querySelector('.pl-delete').addEventListener('click', e => { e.stopPropagation(); deleteSong(item.title, el); });
+        playlistList.appendChild(el);
+      });
+    });
+  }
+
+  function loadFromPlaylist(title, el) {
+    setStatus('Caricamento…', 'spin'); barSet('30%');
+    songName.textContent = title; searchInput.value = title;
+    lyricsCont.innerHTML = ''; emptyState.style.display = 'none';
+    fetch(`/lyric/api/load?title=${encodeURIComponent(title)}`).then(r => r.json()).then(d => {
+      barDone();
+      if (d.error) { setStatus(d.error, 'err'); return; }
+      loadSong(title, d.segments, d.audio, true); highlightPlaylist(title);
+    });
+  }
+
+  function highlightPlaylist(title) {
+    document.querySelectorAll('.pl-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.title === title);
+    });
+  }
+
+  function deleteSong(title, el) {
+    if (!confirm(`Eliminare "${title}"?`)) return;
+    fetch('/lyric/api/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title}),
+    }).then(r => r.json()).then(d => {
+      if (d.ok) {
+        el.remove();
+        if (songName.textContent === title) {
+          audioEl.pause(); audioEl.src = '';
+          playerBar.classList.remove('visible');
+          lyricsCont.innerHTML = ''; emptyState.style.display = '';
+          songName.textContent = '—'; setStatus('In attesa', '');
+        }
+        if (!playlistList.querySelector('.pl-item'))
+          playlistList.innerHTML = '<div class="pl-empty">Nessun testo salvato.<br>Cerca una canzone per iniziare.</div>';
+      }
+    });
+  }
+
+  refreshPlaylist();
+</script>
+</body>
+</html>

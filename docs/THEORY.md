@@ -186,6 +186,73 @@ Le due modalità condividono `Memory`, `tools.py` e `sessions.py` — solo il la
 
 ---
 
+## RaxeusLyric — modulo testi musicali sincronizzati
+
+RaxeusLyric è un modulo aggiuntivo integrato in RaxeusAI che genera testi musicali sincronizzati in tempo reale con l'audio. Il flusso combina tre tecnologie distinte: ricerca metadati, recupero testi e trascrizione AI.
+
+### Pipeline completa
+
+```
+Query utente ("Imagine - John Lennon")
+       │
+       ▼
+iTunes Search API  →  titolo canonico + artista + copertina album
+       │
+       ▼
+lyrics.ovh API  →  testo ufficiale della canzone (se disponibile)
+       │
+       ▼
+yt-dlp  →  download audio da YouTube (mp3, 192kbps)
+       │
+       ▼
+faster-whisper  →  trascrizione audio con word timestamps
+       │
+       ▼
+Forced alignment  →  ogni riga del testo → timestamp preciso
+       │
+       ▼
+LRC file + playlist JSON  →  cache locale per ricaricamenti istantanei
+```
+
+### Whisper e la trascrizione audio
+
+**OpenAI Whisper** è un modello di riconoscimento vocale addestrato su 680.000 ore di audio multilingue. Funziona come un encoder-decoder: l'audio viene convertito in uno spettrogramma mel e passato a un transformer che produce il testo corrispondente.
+
+**faster-whisper** è una reimplementazione ottimizzata di Whisper che usa CTranslate2 (engine C++ per inferenza efficiente) invece di PyTorch. È fino a 4x più veloce con meno memoria RAM, mantenendo la stessa qualità di output.
+
+La trascrizione viene eseguita con `beam_size=5` e `word_timestamps=True` — quest'ultimo parametro è fondamentale perché produce il timestamp di inizio e fine per ogni singola parola, non solo per ogni segmento.
+
+### Forced alignment — sincronizzazione precisa
+
+Quando il testo ufficiale è disponibile, il problema è: "a quale secondo esatto corrisponde ogni riga del testo?". Whisper trascrive l'audio in autonomia ma può sbagliare parole, saltare ritornelli ripetuti, o mescolare sezioni.
+
+Il modulo usa un algoritmo di **semi-global alignment** per allineare le parole del testo ufficiale con le parole trascritte da Whisper (che portano i timestamp):
+
+1. **Normalizzazione**: ogni parola viene ridotta a caratteri alfanumerici in minuscolo
+2. **Scoring**: coppie di parole ricevono un punteggio (EXACT_MATCH=2.6, STRONG_MATCH=1.8, WEAK_MATCH=1.05, MISMATCH=-1.8)
+3. **Programmazione dinamica**: costruisce una matrice n×m per trovare il percorso di allineamento ottimale con penalty per gap (GAP_LYRIC=-1.15, GAP_WHISPER=-0.45)
+4. **Traceback**: risale la matrice per recuperare le coppie di parole allineate
+5. **Interpolazione**: le righe senza match diretto ricevono timestamp interpolati linearmente tra i match vicini
+
+Il risultato è monotono: ogni riga ha un timestamp maggiore della precedente, anche nei ritornelli ripetuti.
+
+### yt-dlp e il download audio
+
+**yt-dlp** è un fork attivamente mantenuto di youtube-dl. Cerca su YouTube il brano più rilevante per la query data, scarica solo la traccia audio (non il video) nel formato migliore disponibile, e la converte in mp3 via FFmpeg. La ricerca usa `ytsearch1:` per prendere il primo risultato.
+
+Il file viene scaricato in `temp_audio/`, poi spostato definitivamente in `lyrics_output/audio/` una volta completata la trascrizione.
+
+### Cache e persistenza
+
+Ogni canzone elaborata viene salvata in tre file:
+- **`.lrc`** — formato standard per testi sincronizzati, con timestamp `[mm:ss.xx]` per ogni riga
+- **`audio/*.mp3`** — file audio per la riproduzione
+- **`covers/*.jpg/png`** — copertina album scaricata da iTunes o YouTube
+
+La **playlist** (`lyrics_output/playlist.json`) funge da indice: mappa ogni titolo al path dei suoi file. Al prossimo accesso alla stessa canzone, la pipeline salta tutto e serve direttamente i dati dalla cache.
+
+---
+
 ## Cosa puoi costruire con questa base
 
 | Progetto | Cosa aggiungere |

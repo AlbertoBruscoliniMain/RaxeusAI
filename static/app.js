@@ -119,9 +119,10 @@ function buildBubble(role, content) {
     applyBubbleColor(b, activeId);
     wrap.appendChild(b);
   } else {
-    const av = document.createElement('div');
+    const av = document.createElement('img');
     av.className = 'avatar';
-    av.textContent = 'R';
+    av.src = '/static/logo.png';
+    av.alt = 'Raxeus';
     const b = document.createElement('div');
     b.className = 'bubble-ai';
     b.innerHTML = marked.parse(content);
@@ -170,7 +171,7 @@ async function sendMessage() {
   const spinWrap = document.createElement('div');
   spinWrap.className = 'msg assistant';
   spinWrap.innerHTML = `
-    <div class="avatar">R</div>
+    <img class="avatar" src="/static/logo.png" alt="Raxeus">
     <div class="thinking">
       <div class="spinner"></div>
       <span>elaborazione...</span>
@@ -208,9 +209,10 @@ async function sendMessage() {
           spinWrap.remove();
           const wrap = document.createElement('div');
           wrap.className = 'msg assistant';
-          const av = document.createElement('div');
+          const av = document.createElement('img');
           av.className = 'avatar';
-          av.textContent = 'R';
+          av.src = '/static/logo.png';
+          av.alt = 'Raxeus';
           aiBubble = document.createElement('div');
           aiBubble.className = 'bubble-ai';
           wrap.appendChild(av);
@@ -361,6 +363,36 @@ async function loadInfoCards() {
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── RAXEUS LYRIC BUTTON ───────────────────────────────────────────────────────
+
+(function () {
+  const btn = document.createElement('a');
+  btn.href = '/lyric';
+  btn.target = '_blank';
+  btn.textContent = 'RaxeusLyric';
+  btn.style.cssText = [
+    'background:none',
+    'border:1px solid #2a2a2a',
+    'border-radius:5px',
+    'padding:3px 10px',
+    'font-size:11px',
+    'font-weight:600',
+    'color:#888',
+    'text-decoration:none',
+    'flex-shrink:0',
+    'letter-spacing:0.2px',
+    'transition:color .15s,border-color .15s',
+    'line-height:1',
+    'white-space:nowrap',
+  ].join(';');
+  btn.addEventListener('mouseenter', () => { btn.style.color = '#c0c0c0'; btn.style.borderColor = '#444'; });
+  btn.addEventListener('mouseleave', () => { btn.style.color = '#888'; btn.style.borderColor = '#2a2a2a'; });
+
+  // Inserisce prima del pallino colore, che è sempre l'ultimo elemento della topbar
+  const colorWrap = document.getElementById('color-dot-wrap');
+  colorWrap.parentNode.insertBefore(btn, colorWrap);
+})();
 
 // ── START ─────────────────────────────────────────────────────────────────────
 
