@@ -3,6 +3,7 @@ from statistics import median
 
 from faster_whisper import WhisperModel
 
+_model: WhisperModel | None = None
 
 MATCH_DIAG = 1
 MATCH_UP = 2
@@ -25,9 +26,11 @@ def get_transcription(file_path: str, hint_lyrics: str = None) -> list:
     Whisper's word timestamps with a monotonic global alignment so repeated
     choruses stay in the correct section of the song.
     """
-    model = WhisperModel("small", device="cpu", compute_type="int8")
+    global _model
+    if _model is None:
+        _model = WhisperModel("small", device="cpu", compute_type="int8")
 
-    segs_gen, _ = model.transcribe(
+    segs_gen, _ = _model.transcribe(
         file_path,
         beam_size=5,
         initial_prompt=hint_lyrics,

@@ -11,7 +11,7 @@ from agent import chat_stream
 from sessions import save_session, list_sessions, load_session
 from lyric_downloader import download_audio
 from lyric_transcriber import get_transcription
-from lyric_formatter import save_as_lrc, update_playlist, check_cache, get_playlist_entry
+from lyric_formatter import save_as_lrc, update_playlist, check_cache_with_entry, get_playlist_entry, safe_title
 from lyric_fetcher import fetch_lyrics
 from lyric_song_finder import find_song
 
@@ -67,10 +67,8 @@ def get_sessions():
 
 @app.route("/session/<session_id>", methods=["DELETE"])
 def delete_session(session_id: str):
-    import os
-    from pathlib import Path
-    path = Path(__file__).parent / "sessions" / f"session_{session_id}.json"
-    if path.exists():
+    path = os.path.join(os.path.dirname(__file__), "sessions", f"session_{session_id}.json")
+    if os.path.exists(path):
         os.remove(path)
     _sessions.pop(session_id, None)
     return jsonify({"ok": True})
@@ -82,10 +80,6 @@ _LYRIC_BASE   = os.path.dirname(__file__)
 _LYRIC_OUT    = os.path.join(_LYRIC_BASE, "lyrics_output")
 _LYRIC_AUDIO  = os.path.join(_LYRIC_OUT, "audio")
 _LYRIC_COVERS = os.path.join(_LYRIC_OUT, "covers")
-
-
-def _safe_title(title: str) -> str:
-    return "".join(c if c.isalnum() or c in " -_()" else "_" for c in title)
 
 
 def _lyric_ev(type_, **kwargs):
@@ -145,7 +139,7 @@ def _download_cover(url: str, display_title: str) -> str | None:
     if not data:
         return None
     os.makedirs(_LYRIC_COVERS, exist_ok=True)
-    stem = _safe_title(display_title)
+    stem = safe_title(display_title)
     ext = _guess_cover_ext(url, ct)
     filename = f"{stem}{ext}"
     dest = os.path.join(_LYRIC_COVERS, filename)
@@ -162,6 +156,8 @@ def _ensure_cover(entry: dict) -> bool:
     cover = entry.get("cover")
     if cover and os.path.exists(os.path.join(_LYRIC_COVERS, cover)):
         return False
+    if entry.get("no_cover"):
+        return False
     if cover:
         entry.pop("cover", None)
         changed = True
@@ -170,12 +166,14 @@ def _ensure_cover(entry: dict) -> bool:
     info = find_song(lookup)
     cover_url = (info or {}).get("artwork_url", "")
     if not cover_url:
-        return changed
+        entry["no_cover"] = True
+        return True
     fn = _download_cover(cover_url, entry.get("title", lookup))
     if fn:
         entry["cover"] = fn
-        changed = True
-    return changed
+    else:
+        entry["no_cover"] = True
+    return True
 
 
 @app.route("/lyric")
@@ -190,9 +188,8 @@ def lyric_process():
         return jsonify({"error": "Query vuota"}), 400
 
     def generate():
-        cached = check_cache(query)
+        cached, entry = check_cache_with_entry(query)
         if cached:
-            entry = get_playlist_entry(query)
             yield _lyric_ev("done",
                             segments=cached, cached=True,
                             audio=entry.get("audio") if entry else None,
@@ -241,7 +238,7 @@ def lyric_process():
             return
 
         os.makedirs(_LYRIC_AUDIO, exist_ok=True)
-        audio_filename = f"{_safe_title(display_title)}.mp3"
+        audio_filename = f"{safe_title(display_title)}.mp3"
         os.replace(audio_path, os.path.join(_LYRIC_AUDIO, audio_filename))
         lrc_path = save_as_lrc(segments, display_title)
         cover_url = (song_info or {}).get("artwork_url") or dl_meta.get("thumbnail")

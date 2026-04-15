@@ -96,10 +96,11 @@ def google_search(query: str) -> str:
             sys.stderr = _old_stderr
         if not urls:
             return web_search(query)
-        results = []
-        for url in urls[:2]:
-            content = fetch_url(url)
-            results.append(f"[{url}]\n{content}")
+        from concurrent.futures import ThreadPoolExecutor
+        targets = urls[:2]
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fetched = list(ex.map(fetch_url, targets))
+        results = [f"[{url}]\n{content}" for url, content in zip(targets, fetched)]
         return "\n\n---\n\n".join(results)
     except Exception:
         return web_search(query)
