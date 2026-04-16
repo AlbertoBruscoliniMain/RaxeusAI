@@ -253,6 +253,49 @@ La **playlist** (`lyrics_output/playlist.json`) funge da indice: mappa ogni tito
 
 ---
 
+## RAG — Retrieval Augmented Generation
+
+RAG è la tecnica con cui un agente AI risponde su documenti specifici **senza fine-tuning**. Invece di riaddestrare il modello, i documenti vengono cercati al momento della domanda e passati come contesto nella risposta.
+
+### Come funziona in RaxeusAI
+
+```
+Domanda utente
+      │
+      ▼
+rag_search(query)  →  ChromaDB cerca i chunk più simili via embedding
+      │
+      ▼
+Chunk rilevanti  →  aggiunti al contesto della chiamata API
+      │
+      ▼
+Modello risponde basandosi sui tuoi documenti reali
+```
+
+### Pipeline completa
+
+1. **Indicizzazione** (eseguita una volta, poi aggiornata): `rag_index.py` legge i file, li divide in chunk da 600 caratteri con overlap di 60, li vettorizza con `all-MiniLM-L6-v2` (modello ONNX locale ~80MB) e li salva in `rag_db/` (ChromaDB persistente su disco).
+
+2. **Retrieval** (ad ogni domanda): il tool `rag_search` converte la query dell'utente nello stesso spazio vettoriale e cerca i 4 chunk più vicini per similarità coseno.
+
+3. **Augmentation**: i chunk trovati tornano al modello come risultato del tool call — il modello li legge e risponde come se avesse "letto" il documento.
+
+### Embedding e similarità vettoriale
+
+Un embedding è una rappresentazione numerica del significato di un testo: una lista di ~384 numeri (per `all-MiniLM-L6-v2`) che posiziona il testo in uno spazio dove testi simili sono vicini. La ricerca trova i chunk più vicini alla query misurando la **similarità coseno** tra i vettori.
+
+Questo è diverso dalla ricerca full-text (grep): trova concetti simili anche se le parole esatte non compaiono.
+
+### ChromaDB
+
+Database vettoriale embedded in Python — gira nel processo, nessun server separato. Salva su disco in `rag_db/` tramite `PersistentClient`. Supporta `upsert` per aggiornare documenti già indicizzati senza duplicati.
+
+### Deduplication e chunk overlap
+
+L'overlap (60 caratteri) evita di perdere contesto ai bordi dei chunk: se una frase importante cade tra due chunk, almeno uno dei due la conterrà intera. L'ID univoco `abs_path::indice` garantisce che rieseguire `rag_index.py` sullo stesso file aggiorni i chunk esistenti invece di duplicarli.
+
+---
+
 ## Cosa puoi costruire con questa base
 
 | Progetto | Cosa aggiungere |
@@ -261,4 +304,4 @@ La **playlist** (`lyrics_output/playlist.json`) funge da indice: mappa ogni tito
 | Bot Telegram | python-telegram-bot + stesso agent.py |
 | UI grafica | Streamlit (rapido) o React (completo) |
 | Tutor personalizzato | system prompt specifico + fine-tuning |
-| RAG (risponde su documenti tuoi) | vettorizzazione testi + retrieval |
+| RAG (risponde su documenti tuoi) | **già implementato** — usa `rag_index.py` per indicizzare |

@@ -29,6 +29,13 @@ try:
 except ImportError:
     _PYPDF_OK = False
 
+try:
+    import chromadb
+    from config import RAG_DB_PATH
+    _CHROMA_OK = True
+except ImportError:
+    _CHROMA_OK = False
+
 
 def web_search(query: str) -> str:
     if not _DDGS_OK:
@@ -160,6 +167,29 @@ def read_pdf(path: str) -> str:
         return f"Errore: {e}"
 
 
+def rag_search(query: str, n_results: int = 4) -> str:
+    if not _CHROMA_OK:
+        return "Errore: chromadb non installato. Esegui: pip install chromadb"
+    try:
+        client = chromadb.PersistentClient(path=RAG_DB_PATH)
+        try:
+            collection = client.get_collection("documents")
+        except Exception:
+            return "Nessun documento indicizzato. Usa rag_index.py per indicizzare dei file."
+        results = collection.query(query_texts=[query], n_results=n_results)
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+        if not docs:
+            return "Nessun risultato rilevante trovato nei documenti indicizzati."
+        parts = []
+        for doc, meta in zip(docs, metas):
+            source = meta.get("source", "sconosciuto")
+            parts.append(f"[Fonte: {source}]\n{doc}")
+        return "\n\n---\n\n".join(parts)
+    except Exception as e:
+        return f"Errore RAG: {e}"
+
+
 def wikipedia_search(query: str, lang: str = "it") -> str:
     if not _REQUESTS_OK:
         return "Errore: libreria requests non installata."
@@ -188,6 +218,7 @@ TOOLS = {
     "wikipedia_search": wikipedia_search,
     "run_python": run_python,
     "get_datetime": get_datetime,
+    "rag_search": rag_search,
 }
 
 TOOL_SCHEMAS = [
@@ -324,6 +355,21 @@ TOOL_SCHEMAS = [
                     "path": {"type": "string", "description": "Percorso del file PDF"}
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rag_search",
+            "description": "Cerca nei documenti personali indicizzati (note, appunti, PDF, file di testo). Usalo quando l'utente chiede qualcosa che potrebbe trovarsi nei suoi file personali salvati localmente.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Cosa cercare nei documenti"},
+                    "n_results": {"type": "integer", "description": "Numero di risultati da restituire (default: 4)"},
+                },
+                "required": ["query"],
             },
         },
     },

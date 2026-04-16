@@ -9,10 +9,11 @@
 
 ```
 RaxeusAI/
-├── config.py               → configurazione centralizzata (modello, URL, personalità)
+├── config.py               → configurazione centralizzata (modello, URL, personalità, RAG_DB_PATH)
 ├── memory.py               → gestione cronologia conversazione + tool messages
 ├── agent.py                → loop agente con streaming, tool calling e chat_stream per la web UI
-├── tools.py                → funzioni eseguibili dall'AI (web, file, PDF, Wikipedia, ora)
+├── tools.py                → funzioni eseguibili dall'AI (web, file, PDF, Wikipedia, ora, RAG)
+├── rag_index.py            → script CLI per indicizzare documenti nel database vettoriale RAG
 ├── sessions.py             → salvataggio e caricamento sessioni su file JSON
 ├── main.py                 → loop terminale (ancora funzionante)
 ├── app.py                  → server Flask: chat AI + modulo RaxeusLyric
@@ -31,6 +32,7 @@ RaxeusAI/
 │   ├── app.js              → logica tab, streaming SSE, color picker, localStorage + bottone RaxeusLyric
 │   └── logo.png            → icona/logo Raxeus
 │
+├── rag_db/                 → generata a runtime — database vettoriale ChromaDB (persistent)
 ├── lyrics_output/          → generata a runtime
 │   ├── playlist.json       → indice di tutte le canzoni elaborate
 │   ├── *.lrc               → testi sincronizzati in formato LRC
@@ -59,12 +61,15 @@ SYSTEM_PROMPT = f"""..."""
 | `OLLAMA_URL` | `str` | Endpoint del server Ollama locale |
 | `AI_NAME` | `str` | Nome dell'assistente, usato nel prompt e nell'UI |
 | `SYSTEM_PROMPT` | `str` | Personalità e istruzioni comportamentali dell'AI |
+| `RAG_DB_PATH` | `str` | Path assoluto della cartella `rag_db/` per il database vettoriale |
 
 **Modifiche applicate:**
 - `AI_NAME` cambiato da `"Jarvis"` a `"Raxeus"`
 - `SYSTEM_PROMPT` riscritto con personalità orgogliosa, pomposa, narcisista — si vanta di ogni risposta
 - Data corrente iniettata dinamicamente all'avvio via `datetime.now()` — il modello sa sempre che anno è
 - Aggiunta regola esplicita: usare i tool senza annunciarlo, mai fidarsi del training data per info recenti
+- Aggiunta istruzione RAG: usare `rag_search` per domande su file/note/documenti personali dell'utente
+- Aggiunto `RAG_DB_PATH` come costante di configurazione centralizzata
 
 ---
 
@@ -166,6 +171,7 @@ Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
 | `wikipedia_search` | `wikipedia_search(query, lang)` | Cerca su Wikipedia e restituisce il sommario della pagina (default lang: `it`) |
 | `run_python` | `run_python(code)` | Esegue codice Python in subprocess, restituisce stdout/stderr (timeout 10s) |
 | `get_datetime` | `get_datetime()` | Restituisce data e ora corrente formattata |
+| `rag_search` | `rag_search(query, n_results)` | Cerca nei documenti personali indicizzati (ChromaDB). Restituisce i chunk più rilevanti con fonte |
 
 ### Struttura di ogni tool schema
 
@@ -203,6 +209,39 @@ Dispatcher centrale: riceve nome e argomenti dal modello, chiama la funzione cor
 - `list_dir` usa `os.listdir` con output ordinato alfabeticamente
 - `read_pdf` usa `pypdf` (guard `_PYPDF_OK`), estrae testo pagina per pagina, limite 4000 char
 - `wikipedia_search` usa l'API REST di Wikipedia (`/api/rest_v1/page/summary/`) — nessuna dipendenza extra, usa `requests` già presente; supporta qualsiasi lingua via parametro `lang`
+- `rag_search` usa `chromadb.PersistentClient` (guard `_CHROMA_OK`); se la collection `documents` non esiste restituisce messaggio guida; `n_results=4` di default; ogni risultato è formattato con `[Fonte: path]` seguito dal chunk di testo
+
+---
+
+## rag_index.py
+
+Script CLI standalone per indicizzare file di testo nel database vettoriale RAG. Non fa parte del loop agente — viene eseguito manualmente dall'utente per aggiornare la knowledge base.
+
+```
+Uso: python rag_index.py <file_o_cartella> [...]
+```
+
+**Formati supportati:** `.txt` `.md` `.pdf`
+
+**Costanti:**
+| Costante | Valore | Descrizione |
+|---|---|---|
+| `CHUNK_SIZE` | 600 | Caratteri per chunk |
+| `CHUNK_OVERLAP` | 60 | Caratteri di sovrapposizione tra chunk adiacenti |
+| `SUPPORTED_EXT` | `.txt .md .pdf` | Estensioni processate |
+
+**Flusso:**
+1. `collect_files(paths)` — espande file e cartelle ricorsivamente, filtra per estensione
+2. `read_file(path)` — legge il testo grezzo (utf-8 con `errors="ignore"`; PDF via `pypdf`)
+3. `chunk_text(text)` — sliding window con overlap; ignora chunk vuoti
+4. `collection.upsert(...)` — inserisce o aggiorna i chunk nel DB con ID `abs_path::index` e metadata `source` + `file`
+5. Stampa progress per ogni file e conteggio finale
+
+**Deduplicazione:** usa `upsert` invece di `add` — rieseguire su un file già indicizzato aggiorna i chunk senza duplicare.
+
+**Embedding:** ChromaDB usa `all-MiniLM-L6-v2` (ONNX, ~80MB) scaricato automaticamente al primo avvio — non richiede configurazione.
+
+**Reset:** eliminare la cartella `rag_db/` e rieseguire.
 
 ---
 
@@ -479,9 +518,13 @@ requests
 beautifulsoup4
 pypdf
 flask
+chromadb
 ```
 
 **Dipendenze originali:** `duckduckgo-search`, `googlesearch-python`, `requests`, `beautifulsoup4` per ricerca web e fetch pagine; `pypdf` per PDF; `flask` per la web UI.
+
+**Dipendenze aggiunte per RAG:**
+- `chromadb` — database vettoriale locale persistente; include automaticamente `onnxruntime` e scarica `all-MiniLM-L6-v2` al primo utilizzo per gli embedding
 
 **Dipendenze aggiunte per RaxeusLyric** (installate nel venv, non ancora in requirements.txt):
 
