@@ -173,16 +173,85 @@ A differenza dei WebSocket (bidirezionali), SSE è unidirezionale server→clien
 
 ---
 
-## Architettura web vs terminale
+## Architettura web vs terminale vs desktop
 
-RaxeusAI supporta due modalità sullo stesso backend:
+RaxeusAI supporta tre modalità sullo stesso backend:
 
-| Modalità | Entry point | Streaming | Sessioni |
-|---|---|---|---|
-| Terminale | `main.py` → `agent.chat()` | stdout diretto | `sessions.py` manuale |
-| Web | `app.py` → `agent.chat_stream()` | SSE via HTTP | `sessions.py` + localStorage |
+| Modalità | Entry point | Streaming | Sessioni | UI |
+|---|---|---|---|---|
+| Terminale | `main.py` → `agent.chat()` | stdout diretto | `sessions.py` manuale | shell |
+| Web | `app.py` → `agent.chat_stream()` | SSE via HTTP | `sessions.py` + localStorage | browser |
+| Desktop | `launcher.py` → `app.py` | SSE via HTTP (localhost) | `sessions.py` + localStorage | finestra nativa WebKit |
 
-Le due modalità condividono `Memory`, `tools.py` e `sessions.py` — solo il layer di presentazione è diverso. `main.py` continua a funzionare indipendentemente.
+Le tre modalità condividono `Memory`, `tools.py` e `sessions.py` — solo il layer di presentazione è diverso. La modalità desktop è tecnicamente identica alla web: `launcher.py` avvia lo stesso `app.py` su una porta libera, e `pywebview` apre quella URL in una finestra WebKit nativa invece di affidarsi al browser di sistema.
+
+---
+
+## App desktop nativa — pywebview
+
+**pywebview** è una libreria Python che apre una finestra nativa del sistema operativo con un motore WebKit embedded, puntata a una URL locale. Il risultato è un'app che appare e si comporta come un'applicazione nativa (dock macOS, icona, cmd+W per chiudere) pur girando su un frontend HTML/CSS/JS identico alla versione web.
+
+### Perché non Electron
+
+Electron (usato da VS Code, Slack, Discord) fa la stessa cosa ma porta con sé Chromium (~150MB) e Node.js. pywebview su macOS usa il WebKit già installato nel sistema (`WKWebView` di macOS) — nessun download aggiuntivo, dimensioni minime.
+
+### Come funziona su macOS
+
+```
+launcher.py
+    │
+    ├─→ threading.Thread(target=flask) ──→ Flask su 127.0.0.1:<porta_libera>
+    │         daemon=True
+    │
+    └─→ webview.create_window(url)
+              │
+              ▼
+        WKWebView (WebKit nativo macOS)
+              │
+              ▼
+        Renderizza l'interfaccia HTML come un browser
+              │  (nessuna barra URL, nessun tab, nessun menu browser)
+```
+
+Il thread Flask è `daemon=True`: quando l'utente chiude la finestra WebKit, pywebview termina il run loop, Python esce, e il thread daemon viene ucciso automaticamente dal runtime senza bisogno di cleanup esplicito.
+
+### Bundle macOS (.app)
+
+Su macOS un'applicazione è una **directory** con estensione `.app` e una struttura interna precisa:
+
+```
+RaxeusAI.app/
+├── Contents/
+│   ├── Info.plist        ← metadati: nome, icona, bundle ID, versione
+│   ├── MacOS/
+│   │   └── RaxeusAI      ← eseguibile: script bash che attiva il venv e chiama launcher.py
+│   └── Resources/
+│       └── AppIcon.icns  ← icona multi-risoluzione (16px → 1024px)
+```
+
+`Info.plist` è un XML che macOS legge per sapere come mostrare l'app: icona in Finder/Dock, nome visualizzato, versione. La chiave `NSAllowsLocalNetworking: true` è necessaria perché la WebView carichi URL `127.0.0.1` (App Transport Security di macOS blocca HTTP non-HTTPS per default).
+
+### Icona .icns
+
+Il formato `.icns` è un container che include lo stesso logo a più risoluzioni (16, 32, 64, 128, 256, 512, 1024px e varianti @2x). macOS sceglie automaticamente la risoluzione giusta in base al contesto (Finder, Dock, Spotlight). Lo strumento `iconutil` converte un `.iconset` (cartella di PNG) in `.icns`.
+
+### macOS TCC e posizione del progetto
+
+macOS protegge alcune cartelle utente speciali tramite il sistema **TCC** (Transparency, Consent, and Control). Le app non firmate da un Apple Developer non possono accedere a Desktop, Documenti e Download senza permesso esplicito — qualsiasi processo avviato dal bundle `.app` riceve `[Errno 1] Operation not permitted` su qualsiasi file in quelle cartelle, inclusi script Python, template Flask e dipendenze del venv.
+
+La restrizione si applica all'intero contesto del bundle: bash, Python, `cp` — qualsiasi processo figlio eredita la stessa limitazione TCC.
+
+**Regola:** il progetto RaxeusAI deve trovarsi in una cartella NON protetta:
+
+| Posizione | Protetta TCC | Funziona |
+|---|---|---|
+| `~/Desktop/RaxeusAI/` | Sì | No |
+| `~/Documents/RaxeusAI/` | Sì | No |
+| `~/Downloads/RaxeusAI/` | Sì | No |
+| `~/RaxeusAI/` | No | Sì |
+| `~/Projects/RaxeusAI/` | No | Sì |
+
+Dopo qualsiasi spostamento del progetto è obbligatorio rieseguire `bash create_app.sh` — il bundle contiene path assoluti.
 
 ---
 
@@ -305,3 +374,4 @@ L'overlap (60 caratteri) evita di perdere contesto ai bordi dei chunk: se una fr
 | UI grafica | Streamlit (rapido) o React (completo) |
 | Tutor personalizzato | system prompt specifico + fine-tuning |
 | RAG (risponde su documenti tuoi) | **già implementato** — usa `rag_index.py` per indicizzare |
+| App desktop nativa macOS | **già implementato** — `launcher.py` + `create_app.sh`; progetto in `~/RaxeusAI/` |

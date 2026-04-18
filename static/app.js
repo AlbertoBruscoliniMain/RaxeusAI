@@ -369,7 +369,6 @@ function esc(s) {
 (function () {
   const btn = document.createElement('a');
   btn.href = '/lyric';
-  btn.target = '_blank';
   btn.textContent = 'RaxeusLyric';
   btn.style.cssText = [
     'background:none',

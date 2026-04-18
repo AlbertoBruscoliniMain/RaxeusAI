@@ -32,6 +32,10 @@ RaxeusAI/
 │   ├── app.js              → logica tab, streaming SSE, color picker, localStorage + bottone RaxeusLyric
 │   └── logo.png            → icona/logo Raxeus
 │
+├── launcher.py             → entry point desktop: avvia Flask in thread + finestra nativa pywebview
+├── create_app.sh           → script una-tantum: crea RaxeusAI.app sul Desktop (icona + bundle macOS)
+├── AppIcon.icns            → icona macOS generata da create_app.sh (non committare)
+│
 ├── rag_db/                 → generata a runtime — database vettoriale ChromaDB (persistent)
 ├── lyrics_output/          → generata a runtime
 │   ├── playlist.json       → indice di tutte le canzoni elaborate
@@ -328,6 +332,85 @@ Richiesta a `https://itunes.apple.com/search` con `entity=song&limit=1`. La cope
 
 ---
 
+## launcher.py
+
+Entry point per la modalità **app desktop nativa**. Avvia Flask in un thread background e apre l'interfaccia in una finestra WebKit nativa tramite `pywebview` — nessun browser, nessuna barra URL.
+
+```python
+def _find_free_port() -> int: ...       # sceglie una porta TCP libera a runtime
+def _start_flask(port: int) -> None:    # gira in thread daemon
+def _wait_for_flask(url, retries, delay) -> bool:  # polling finché Flask è pronto
+```
+
+**Flusso di avvio:**
+1. `logging.getLogger("werkzeug").setLevel(logging.ERROR)` — sopprime il banner Werkzeug prima di qualsiasi import Flask
+2. `_HERE = os.path.dirname(os.path.abspath(__file__))` + `os.chdir(_HERE)` — garantisce che i path relativi di Flask (templates, static, sessions) funzionino da qualsiasi cwd; `sys.path.insert(0, _HERE)` rende importabile `app.py`
+3. `_find_free_port()` — ottiene una porta TCP libera su `127.0.0.1` (nessun conflitto anche con più istanze)
+4. Flask parte in un `threading.Thread` con `daemon=True` — viene ucciso automaticamente alla chiusura della finestra
+5. `_wait_for_flask()` — polling con `urllib.request.urlopen` ogni 0.15s (max 40 tentativi = 6s timeout)
+6. `webview.create_window()` + `webview.start()` — apre la finestra nativa e avvia il run loop (bloccante)
+
+**Dettagli tecnici:**
+- `debug=False` e `use_reloader=False` su Flask — obbligatori in modalità thread (il reloader fork il processo e rompe il run loop)
+- La finestra parte 1280×820 con `min_size=(800, 600)`, `text_select=True` (testo selezionabile come in un browser)
+- Il progetto deve trovarsi **fuori dalle cartelle protette da macOS TCC** (Desktop, Documents, Downloads) — vedi THEORY.md sezione TCC
+
+**Avvio diretto (senza .app):**
+```bash
+source venv/bin/activate
+python launcher.py
+```
+
+---
+
+## create_app.sh
+
+Script bash da eseguire **una sola volta** (o dopo aggiornamenti al logo o spostamento del progetto) per generare `RaxeusAI.app` sul Desktop macOS.
+
+**Fasi:**
+
+| Step | Operazione |
+|---|---|
+| 1 | Crop centrato del logo (1928×1138 → 1138×1138 quadrato) con `sips --cropOffset` |
+| 2 | Generazione di tutte le risoluzioni richieste da macOS (`iconutil`): 16, 32, 64, 128, 256, 512px + varianti @2x |
+| 3 | Conversione in `.icns` con `iconutil -c icns` |
+| 4 | Creazione struttura `.app/Contents/{MacOS,Resources}` |
+| 5 | Scrittura `Info.plist` (bundle ID, nome, icona, `NSAllowsLocalNetworking`) |
+| 6 | Scrittura script eseguibile `Contents/MacOS/RaxeusAI` con path assoluti al venv e al launcher |
+| 7 | `lsregister` — registra l'app con Launch Services per aggiornare l'icona in Finder |
+
+**Struttura del bundle generato:**
+```
+RaxeusAI.app/
+├── Contents/
+│   ├── Info.plist
+│   ├── MacOS/
+│   │   └── RaxeusAI          ← bash script: cd ~/RaxeusAI && exec venv/python launcher.py
+│   └── Resources/
+│       └── AppIcon.icns
+```
+
+**Contenuto script `Contents/MacOS/RaxeusAI`:**
+```bash
+#!/bin/bash
+cd "/Users/alby/RaxeusAI"
+exec "/Users/alby/RaxeusAI/venv/bin/python" "/Users/alby/RaxeusAI/launcher.py"
+```
+
+**Note:**
+- Il bundle contiene path assoluti → va ricreato con `bash create_app.sh` se il progetto viene spostato
+- **Il progetto DEVE stare fuori da Desktop/Documents/Downloads** — macOS TCC blocca i processi del bundle dall'accedere a quelle cartelle (vedi THEORY.md). Il path corretto è `~/RaxeusAI/`
+- Prima apertura: tasto destro → **Apri** (Gatekeeper blocca le app non firmate con firma Apple)
+- `AppIcon.icns` è generato localmente — non va committato (aggiunto a `.gitignore`)
+
+**Ricreazione:**
+```bash
+cd ~/RaxeusAI
+bash create_app.sh
+```
+
+---
+
 ## app.py
 
 Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, Memory]` con una `Memory` attiva per ogni conversazione aperta nel browser.
@@ -453,7 +536,7 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 - `btnInfo`, `infoOverlay`, `infoClose` — DOM refs per il modal info
 - `loadInfoCards()` — fetch parallelo dei profili `AlbertoBruscoliniMain` e `AlbertoBruscolini` via `api.github.com/users/<username>`; costruisce le card dinamicamente e le inserisce in `#info-cards`; usa il flag `infoCardsLoaded` per evitare fetch ripetuti
 - Event listeners: `btnInfo` → rimuove `.hidden` dall'overlay e chiama `loadInfoCards()`; `infoClose` → aggiunge `.hidden`; click sull'overlay stesso → chiude se il target è l'overlay (non la card)
-- **Bottone RaxeusLyric** — iniettato via IIFE alla fine del file; crea un `<a href="/lyric" target="_blank">` con stile inline completo e lo inserisce nella topbar tramite `insertBefore(btn, colorWrap)`, prima del pallino colore. Hover gestito via `mouseenter`/`mouseleave` per non toccare `style.css`.
+- **Bottone RaxeusLyric** — iniettato via IIFE alla fine del file; crea un `<a href="/lyric">` con stile inline completo e lo inserisce nella topbar tramite `insertBefore(btn, colorWrap)`, prima del pallino colore. Hover gestito via `mouseenter`/`mouseleave` per non toccare `style.css`. Navigazione nella stessa finestra pywebview (nessun `target="_blank"`).
 
 **Max 5 tab:** aprire la sesta chat chiude automaticamente la prima (la più vecchia).
 
@@ -519,12 +602,16 @@ beautifulsoup4
 pypdf
 flask
 chromadb
+pywebview
 ```
 
 **Dipendenze originali:** `duckduckgo-search`, `googlesearch-python`, `requests`, `beautifulsoup4` per ricerca web e fetch pagine; `pypdf` per PDF; `flask` per la web UI.
 
 **Dipendenze aggiunte per RAG:**
 - `chromadb` — database vettoriale locale persistente; include automaticamente `onnxruntime` e scarica `all-MiniLM-L6-v2` al primo utilizzo per gli embedding
+
+**Dipendenze aggiunte per app desktop:**
+- `pywebview` — finestra WebKit nativa su macOS; installa automaticamente `pyobjc-core`, `pyobjc-framework-WebKit`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz` e `bottle`
 
 **Dipendenze aggiunte per RaxeusLyric** (installate nel venv, non ancora in requirements.txt):
 
@@ -566,11 +653,35 @@ pip install -r requirements.txt
 
 ## Come avviare il progetto
 
+**Modalità terminale (classica):**
 ```bash
-# 1. Avvia Ollama
 ollama serve
-
-# 2. Dalla cartella del progetto
 source venv/bin/activate
 python main.py
+```
+
+**Modalità web (browser):**
+```bash
+ollama serve
+source venv/bin/activate
+python app.py
+# apri http://localhost:5000
+```
+
+**Modalità desktop nativa (app macOS):**
+```bash
+# Il progetto deve essere in ~/RaxeusAI (non in Desktop/Documents/Downloads)
+
+# Prima volta — crea RaxeusAI.app sul Desktop:
+cd ~/RaxeusAI
+bash create_app.sh
+# Poi: doppio click su RaxeusAI.app (prima apertura: tasto destro → Apri)
+
+# Se sposti il progetto, rigenera sempre il bundle:
+bash create_app.sh
+
+# Oppure, avvio diretto senza .app:
+ollama serve
+source venv/bin/activate
+python launcher.py
 ```
