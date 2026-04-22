@@ -306,20 +306,20 @@ gantt
     dateFormat  YYYY-MM-DD
     title Piano di progetto RaxeusAI
     section Analisi e setup
-    Architettura e requisiti       :a1, 2026-04-14, 3d
-    Setup Ollama e Flask           :a2, after a1, 2d
+    Analisi requisiti    :a1, 2026-04-14, 3d
+    Setup ambiente       :a2, after a1, 2d
     section Backend
-    Memory e agent loop            :b1, after a2, 4d
-    Tool calling                   :b2, after b1, 4d
-    Persistenza sessioni           :b3, after b2, 3d
+    Memory e agent       :b1, after a2, 4d
+    Tool calling         :b2, after b1, 4d
+    Persistenza          :b3, after b2, 3d
     section Web UI
-    HTML e CSS base                :c1, after b3, 3d
-    Streaming SSE                  :c2, after c1, 4d
-    Tab e color picker             :c3, after c2, 3d
+    HTML e CSS           :c1, after b3, 3d
+    Streaming SSE        :c2, after c1, 4d
+    Tab e colori         :c3, after c2, 3d
     section Rifinitura
-    Markdown rendering             :d1, after c3, 2d
-    Test e documentazione          :d2, after d1, 12d
-    Consegna su GitHub             :d3, 2026-05-31, 1d
+    Markdown             :d1, after c3, 2d
+    Test e doc           :d2, after d1, 12d
+    Consegna             :d3, 2026-05-31, 1d
 ```
 
 
