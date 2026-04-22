@@ -11,8 +11,8 @@
 Lo scopo di questo documento è:
 - descrivere in modo chiaro il prodotto realizzato;
 - raccogliere i requisiti funzionali e non funzionali;
-- fornire una progettazione concettuale con diagrammi UML e casi d'uso;
-- definire la roadmap di lavoro con milestone e attività principali.
+- fornire una prima progettazione concettuale e una roadmap di lavoro con diagrammi ER, UML e casi d'uso, organizzata nelle fasi di analisi, sviluppo e rifinitura;
+- definire una roadmap di lavoro con milestone e attività principali.
 
 ### 1.2 Contesto
 
@@ -99,6 +99,45 @@ RaxeusAI è un assistente AI personale che gira localmente sul Mac tramite Ollam
 ## 7. Modello dei dati
 
 RaxeusAI non utilizza un database relazionale. La persistenza è gestita tramite file JSON nella cartella `sessions/`. Di seguito la struttura dei dati principali.
+
+### 7.0 Schema ER concettuale
+
+Sebbene la persistenza sia su file JSON, è possibile rappresentare le entità principali e le loro relazioni come schema concettuale equivalente a un ER.
+
+```mermaid
+erDiagram
+    SESSIONE {
+        string session_id PK
+        string titolo
+        datetime data_creazione
+    }
+    MESSAGGIO {
+        int indice PK
+        string session_id FK
+        string role
+        string content
+    }
+    TOOL_CALL {
+        string id PK
+        int messaggio_indice FK
+        string nome_tool
+        string arguments
+    }
+    TOOL_RESULT {
+        string tool_call_id FK
+        string content
+    }
+    PREFERENZA_BOLLA {
+        string session_id FK
+        string bg_color
+        string text_color
+    }
+
+    SESSIONE ||--o{ MESSAGGIO : contiene
+    MESSAGGIO ||--o{ TOOL_CALL : genera
+    TOOL_CALL ||--o| TOOL_RESULT : produce
+    SESSIONE ||--o| PREFERENZA_BOLLA : ha
+```
 
 ### Struttura di una sessione (file JSON)
 
@@ -205,19 +244,46 @@ classDiagram
 - **Cerca tra le chat**: l'utente digita nella barra di ricerca; le tab vengono filtrate in tempo reale per titolo.
 - **Personalizza colore bolla**: l'utente clicca il pallino colorato in alto a destra, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
 
-### 9.3 Diagramma dei casi d'uso
+### 9.3 Relazioni tra casi d'uso: include ed extend
 
-```mermaid
-graph LR
-    U[Utente] --> IM[Invia messaggio]
-    U --> NB[Apri nuova chat]
-    U --> CT[Cambia tab attiva]
-    U --> CL[Chiudi tab]
-    U --> SR[Cerca tra le chat]
-    U --> PC[Personalizza colore bolla]
-    IM --> RS[Risposta in streaming]
-    RS --> ET[Esecuzione tool automatica]
-    ET --> RS
+In un diagramma dei casi d'uso si usano due tipi di relazioni aggiuntive:
+
+- `<<include>>`: rappresenta un comportamento obbligatorio riutilizzabile. Un caso d'uso base include un altro caso d'uso quando il suo comportamento è sempre eseguito.
+- `<<extend>>`: rappresenta un comportamento opzionale o alternativo che si aggiunge al caso d'uso base solo in certe condizioni.
+
+Per RaxeusAI, le relazioni principali sono:
+
+- `Invia messaggio` <<include>> `Ricevi risposta in streaming`: ogni messaggio inviato produce sempre una risposta in streaming.
+- `Ricevi risposta in streaming` <<include>> `Esecuzione automatica tool`: durante la generazione il modello può chiamare tool; questo passaggio è parte integrante del flusso di risposta ogni volta che il modello lo decide.
+
+Esempi di `extend`:
+
+- `Carica sessione passata` <<extend>> `Apri nuova chat`: l'utente può aprire una chat preesistente invece di crearne una nuova.
+- `Personalizza colore bolla` <<extend>> `Apri nuova chat`: la personalizzazione del colore è opzionale e si attiva solo se l'utente lo desidera dopo aver aperto una chat.
+
+### 9.4 Diagramma dei casi d'uso
+
+Il diagramma è stato generato a partire dal file PlantUML `REQUISITI_UseCase.puml`.
+
+```plantuml
+@startuml uc
+left to right direction
+actor "Utente locale" as Utente
+
+Utente --> (Invia messaggio)
+Utente --> (Apri nuova chat)
+Utente --> (Cambia tab attiva)
+Utente --> (Chiudi tab)
+Utente --> (Cerca tra le chat)
+Utente --> (Personalizza colore bolla)
+Utente --> (Carica sessione passata)
+
+(Invia messaggio) .> (Ricevi risposta in streaming) : <<include>>
+(Ricevi risposta in streaming) .> (Esecuzione automatica tool) : <<include>>
+
+(Carica sessione passata) .> (Apri nuova chat) : <<extend>>
+(Personalizza colore bolla) .> (Apri nuova chat) : <<extend>>
+@enduml
 ```
 
 ## 10. Pianificazione e milestone
