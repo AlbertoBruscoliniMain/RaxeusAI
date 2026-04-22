@@ -288,13 +288,14 @@ Utente --> (Carica sessione passata)
 
 ## 10. Pianificazione e milestone
 
-| Fase | Attività | Periodo |
-| --- | --- | --- |
-| 1 | Analisi dei requisiti, schema architettura, setup ambiente (Ollama, venv, Flask) | Aprile 2026 |
-| 2 | Backend: memoria conversazionale, agent loop con streaming | Aprile 2026 |
-| 3 | Tool calling: web search, file, Python, PDF, Wikipedia | Aprile–Maggio 2026 |
-| 4 | Web UI: template HTML, streaming SSE, tab management, color picker | Maggio 2026 |
-| 5 | Markdown rendering, persistenza sessioni, testing, documentazione, push su GitHub | Fine Maggio 2026 |
+| Settimana | Attività |
+| --- | --- |
+| 1 (14–18 apr) | Analisi requisiti, schema ER e UML, setup ambiente (Ollama, venv, Flask) |
+| 2 (22–25 apr) | Backend: memoria conversazionale e agent loop con streaming |
+| 3 (28 apr–2 mag) | Tool calling: web search, file, Python, PDF, Wikipedia |
+| 4 (5–9 mag) | Web UI: template HTML, streaming SSE |
+| 5 (12–16 mag) | Tab management, color picker, markdown rendering |
+| 6 (19–31 mag) | Testing, correzioni bug, documentazione, consegna su GitHub |
 
 **Consegna prevista: 31 maggio 2026.**
 
@@ -305,19 +306,19 @@ gantt
     dateFormat  YYYY-MM-DD
     title Piano di progetto RaxeusAI
     section Analisi e setup
-    Architettura e requisiti       :a1, 2026-04-09, 3d
+    Architettura e requisiti       :a1, 2026-04-14, 3d
     Setup Ollama e Flask           :a2, after a1, 2d
     section Backend
     Memory e agent loop            :b1, after a2, 4d
     Tool calling                   :b2, after b1, 4d
     Persistenza sessioni           :b3, after b2, 3d
     section Web UI
-    HTML e CSS base                :c1, after a2, 3d
+    HTML e CSS base                :c1, after b3, 3d
     Streaming SSE                  :c2, after c1, 4d
     Tab e color picker             :c3, after c2, 3d
     section Rifinitura
     Markdown rendering             :d1, after c3, 2d
-    Test e documentazione          :d2, after d1, 7d
+    Test e documentazione          :d2, after d1, 12d
     Consegna su GitHub             :d3, 2026-05-31, 1d
 ```
 
