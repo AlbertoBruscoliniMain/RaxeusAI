@@ -5,6 +5,7 @@ from datetime import datetime
 RAG_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rag_db")
 
 MODEL = "qwen3:8b"          # modello Ollama da usare
+VISION_MODEL = "llava"      # modello Ollama per analisi immagini
 OLLAMA_URL = "http://localhost:11434/v1"
 AI_NAME = "Raxeus"          # nome del tuo assistente
 _TODAY = datetime.now().strftime("%A %d %B %Y")

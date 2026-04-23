@@ -41,15 +41,17 @@ def index():
 def chat():
     data = request.get_json()
     message = data.get("message", "").strip()
+    images = data.get("images") or []
     session_id = data.get("session_id", str(uuid.uuid4()))
-    if not message:
+
+    if not message and not images:
         return jsonify({"error": "messaggio vuoto"}), 400
 
     mem = _get_memory(session_id)
 
     def generate():
         yield f"data: {json.dumps({'type': 'session_id', 'value': session_id})}\n\n"
-        for event in chat_stream(message, mem):
+        for event in chat_stream(message, mem, images=images or None):
             yield f"data: {json.dumps(event)}\n\n"
         save_session(mem.get())
 

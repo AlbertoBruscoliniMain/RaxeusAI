@@ -1,7 +1,7 @@
 import json
 from openai import OpenAI
 from memory import Memory
-from config import MODEL, OLLAMA_URL
+from config import MODEL, VISION_MODEL, OLLAMA_URL
 from tools import TOOL_SCHEMAS, execute_tool
 
 client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
@@ -77,8 +77,37 @@ def reset():
     memory.reset()
 
 
-def chat_stream(user_input: str, mem: Memory):
+def chat_stream(user_input: str, mem: Memory, images: list | None = None):
     """Generator per la web UI: yielda eventi SSE invece di stampare su stdout."""
+
+    if images:
+        content = [{"type": "text", "text": user_input or "Descrivi queste immagini."}]
+        for img_b64 in images:
+            content.append({"type": "image_url", "image_url": {"url": img_b64}})
+
+        vision_messages = mem.get() + [{"role": "user", "content": content}]
+        stream = client.chat.completions.create(
+            model=VISION_MODEL,
+            messages=vision_messages,
+            stream=True,
+        )
+
+        full_content = ""
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                full_content += delta.content
+                yield {"type": "token", "content": delta.content}
+
+        n = len(images)
+        img_note = f"[{n} {'immagine allegata' if n == 1 else 'immagini allegate'}]"
+        mem.add("user", f"{img_note}\n{user_input}" if user_input else img_note)
+        mem.add("assistant", full_content)
+        yield {"type": "done"}
+        return
+
     mem.add("user", user_input)
 
     while True:

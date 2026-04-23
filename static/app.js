@@ -9,26 +9,30 @@ const COLOR_PRESETS = [
 ];
 
 const MAX_TABS = 5;
+const MAX_IMAGES = 3;
 
 // Stato globale
 let tabs = [];      // [{id, title, color}]
 let activeId = null;
 let isStreaming = false;
+let selectedImages = []; // [{file, dataUrl}]
 
 // DOM
-const tabsEl      = document.getElementById('tabs');
-const chatEl      = document.getElementById('chat-area');
-const searchEl    = document.getElementById('search');
-const btnNew      = document.getElementById('btn-new');
-const btnSend     = document.getElementById('btn-send');
-const msgInput    = document.getElementById('msg-input');
-const colorDot    = document.getElementById('color-dot');
-const colorPicker = document.getElementById('color-picker');
-const presetsEl   = document.getElementById('presets');
-const customColor = document.getElementById('custom-color');
-const btnInfo     = document.getElementById('btn-info');
-const infoOverlay = document.getElementById('info-overlay');
-const infoClose   = document.getElementById('info-close');
+const tabsEl          = document.getElementById('tabs');
+const chatEl          = document.getElementById('chat-area');
+const searchEl        = document.getElementById('search');
+const btnNew          = document.getElementById('btn-new');
+const btnSend         = document.getElementById('btn-send');
+const msgInput        = document.getElementById('msg-input');
+const colorDot        = document.getElementById('color-dot');
+const colorPicker     = document.getElementById('color-picker');
+const presetsEl       = document.getElementById('presets');
+const customColor     = document.getElementById('custom-color');
+const btnInfo         = document.getElementById('btn-info');
+const infoOverlay     = document.getElementById('info-overlay');
+const infoClose       = document.getElementById('info-close');
+const imgInput        = document.getElementById('img-input');
+const imgPreviewStrip = document.getElementById('img-preview-strip');
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 
@@ -108,14 +112,32 @@ function renderChat(id) {
   scrollBottom();
 }
 
-function buildBubble(role, content) {
+function buildBubble(role, content, images = []) {
   const wrap = document.createElement('div');
   wrap.className = `msg ${role}`;
 
   if (role === 'user') {
     const b = document.createElement('div');
     b.className = 'bubble-user';
-    b.textContent = content;
+
+    if (images.length > 0) {
+      const strip = document.createElement('div');
+      strip.className = 'bubble-imgs';
+      images.forEach(dataUrl => {
+        const img = document.createElement('img');
+        img.className = 'bubble-img';
+        img.src = dataUrl;
+        strip.appendChild(img);
+      });
+      b.appendChild(strip);
+    }
+
+    if (content) {
+      const t = document.createElement('div');
+      t.textContent = content;
+      b.appendChild(t);
+    }
+
     applyBubbleColor(b, activeId);
     wrap.appendChild(b);
   } else {
@@ -143,6 +165,52 @@ function appendMessage(role, content) {
   return el;
 }
 
+// ── IMMAGINI ──────────────────────────────────────────────────────────────────
+
+function renderImagePreviews() {
+  imgPreviewStrip.innerHTML = '';
+  selectedImages.forEach((img, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-preview-wrap';
+    const thumb = document.createElement('img');
+    thumb.className = 'img-preview-thumb';
+    thumb.src = img.dataUrl;
+    const rm = document.createElement('button');
+    rm.className = 'img-preview-rm';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      selectedImages.splice(i, 1);
+      renderImagePreviews();
+      updateChatBottom();
+    });
+    wrap.appendChild(thumb);
+    wrap.appendChild(rm);
+    imgPreviewStrip.appendChild(wrap);
+  });
+  updateChatBottom();
+}
+
+function updateChatBottom() {
+  chatEl.style.bottom = document.getElementById('input-wrap').offsetHeight + 'px';
+}
+
+imgInput.addEventListener('change', () => {
+  const files = Array.from(imgInput.files);
+  const slots = MAX_IMAGES - selectedImages.length;
+  const toAdd = files.slice(0, slots);
+  Promise.all(
+    toAdd.map(file => new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve({ file, dataUrl: e.target.result });
+      reader.readAsDataURL(file);
+    }))
+  ).then(results => {
+    selectedImages = [...selectedImages, ...results];
+    renderImagePreviews();
+  });
+  imgInput.value = '';
+});
+
 function scrollBottom() {
   chatEl.scrollTop = chatEl.scrollHeight;
 }
@@ -152,18 +220,31 @@ function scrollBottom() {
 async function sendMessage() {
   if (isStreaming) return;
   const text = msgInput.value.trim();
-  if (!text) return;
+  const imagesToSend = [...selectedImages];
+  if (!text && imagesToSend.length === 0) return;
 
   msgInput.value = '';
   msgInput.style.height = 'auto';
+  selectedImages = [];
+  renderImagePreviews();
 
   // Titolo automatico al primo messaggio
   if (loadMessages(activeId).length === 0) {
-    tabs = tabs.map(t => t.id === activeId ? { ...t, title: text.slice(0, 30) } : t);
+    const title = text || `[${imagesToSend.length} immagini]`;
+    tabs = tabs.map(t => t.id === activeId ? { ...t, title: title.slice(0, 30) } : t);
     renderTabs();
   }
 
-  appendMessage('user', text);
+  // Salva testo in localStorage (senza le immagini per non saturare lo storage)
+  const storedText = text || (imagesToSend.length > 0
+    ? `[${imagesToSend.length} ${imagesToSend.length === 1 ? 'immagine allegata' : 'immagini allegate'}]`
+    : '');
+  const msgs = loadMessages(activeId);
+  msgs.push({ role: 'user', content: storedText });
+  saveMessages(activeId, msgs);
+  buildBubble('user', text, imagesToSend.map(i => i.dataUrl));
+  scrollBottom();
+
   isStreaming = true;
   btnSend.disabled = true;
 
@@ -185,7 +266,11 @@ async function sendMessage() {
   const res = await fetch('/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: text, session_id: activeId }),
+    body: JSON.stringify({
+      message: text,
+      session_id: activeId,
+      images: imagesToSend.map(i => i.dataUrl),
+    }),
   });
 
   const reader = res.body.getReader();
@@ -309,6 +394,7 @@ msgInput.addEventListener('keydown', e => {
 msgInput.addEventListener('input', () => {
   msgInput.style.height = 'auto';
   msgInput.style.height = msgInput.scrollHeight + 'px';
+  updateChatBottom();
 });
 
 searchEl.addEventListener('input', renderTabs);
@@ -395,4 +481,5 @@ function esc(s) {
 
 // ── START ─────────────────────────────────────────────────────────────────────
 
-init();
+window.addEventListener('resize', updateChatBottom);
+init().then(updateChatBottom);
