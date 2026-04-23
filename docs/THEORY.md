@@ -131,6 +131,48 @@ Utile per: testare modelli grandi (70B+) non scaricabili in locale, sviluppare s
 
 ---
 
+## Modelli vision (multimodali)
+
+Un modello **multimodale** accetta input di tipo diverso — testo e immagini — nella stessa chiamata API. Internamente, il modello converte ogni immagine in una sequenza di token visivi tramite un **image encoder** (solitamente un Vision Transformer) e li concatena ai token testuali prima di passarli al transformer linguistico.
+
+### Formato OpenAI multimodale
+
+Quando si inviano immagini, il campo `content` del messaggio non è più una stringa ma un array di blocchi:
+
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "Cosa c'è in questa immagine?" },
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,..." } }
+  ]
+}
+```
+
+L'immagine viene codificata come **data URI base64** — una stringa che include il tipo MIME e i byte dell'immagine codificati in ASCII. Questo evita la necessità di caricare l'immagine su un server separato: viaggia direttamente nel corpo della richiesta JSON.
+
+### Come funziona in RaxeusAI
+
+1. L'utente seleziona fino a 3 immagini nell'UI — `FileReader` le converte in data URI nel browser
+2. Il payload POST `/chat` include il campo `images: [dataUri, ...]`
+3. `agent.chat_stream()` costruisce il messaggio multimodale e lo invia a `VISION_MODEL` (default: `llava`)
+4. La risposta viene streamata normalmente come testo
+5. In memoria viene salvata solo la versione testuale (`[N immagini allegate]`) per compatibilità con i turni successivi che usano il modello testo
+
+### Modelli vision disponibili su Ollama
+
+| Modello | RAM ~| Note |
+|---|---|---|
+| `llava:7b` | ~5GB | buona qualità generale, usato di default |
+| `llava:13b` | ~9GB | migliore ma più lento |
+| `moondream` | ~2GB | leggerissimo, qualità limitata |
+| `minicpm-v` | ~6GB | ottimo per testi nelle immagini |
+| `qwen2-vl` | ~5GB | buona qualità, multilingue |
+
+Per cambiare modello vision basta modificare `VISION_MODEL` in `config.py`.
+
+---
+
 ## Modelli consigliati per Mac M3 16GB
 
 La RAM unificata di Apple Silicon è condivisa tra CPU e GPU — puoi girare modelli più grandi del previsto.

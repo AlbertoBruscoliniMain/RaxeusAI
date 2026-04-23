@@ -61,7 +61,8 @@ SYSTEM_PROMPT = f"""..."""
 
 | Variabile | Tipo | Descrizione |
 |---|---|---|
-| `MODEL` | `str` | Nome del modello Ollama da usare |
+| `MODEL` | `str` | Nome del modello Ollama da usare per testo |
+| `VISION_MODEL` | `str` | Nome del modello Ollama per analisi immagini (default: `llava`) |
 | `OLLAMA_URL` | `str` | Endpoint del server Ollama locale |
 | `AI_NAME` | `str` | Nome dell'assistente, usato nel prompt e nell'UI |
 | `SYSTEM_PROMPT` | `str` | Personalità e istruzioni comportamentali dell'AI |
@@ -145,12 +146,18 @@ def reset(): ...
 - `memory` è esposto a livello di modulo per permettere a `main.py` di importarlo per le sessioni
 - Aggiunto `chat_stream` per la web UI (vedi sotto)
 
-**`chat_stream(user_input, mem)`:** versione generator di `chat` per la web UI. Invece di stampare su stdout, yielda dizionari:
+**`chat_stream(user_input, mem, images=None)`:** versione generator di `chat` per la web UI. Invece di stampare su stdout, yielda dizionari:
 - `{"type": "token", "content": "..."}` — per ogni chunk di testo generato
 - `{"type": "thinking"}` — quando il modello inizia una tool call
 - `{"type": "done"}` — quando la risposta è completa
 
 Viene chiamata da `app.py` e i dizionari vengono serializzati come eventi SSE inviati al browser.
+
+**Flusso con immagini (`images` non None):**
+1. Costruisce un messaggio multimodale OpenAI-format: `content = [{"type": "text", ...}, {"type": "image_url", "image_url": {"url": "data:image/...;base64,..."}}]`
+2. Appende il messaggio alla history esistente (senza modificare `mem`) e chiama `VISION_MODEL` — senza tool schemas (la maggior parte dei modelli vision non li supporta)
+3. Yielda i token normalmente
+4. Salva in `mem` la versione **testo-only** del messaggio utente (`[N immagini allegate]` + eventuale testo) — così i turni successivi continuano con `MODEL` senza storia multimodale incompatibile
 
 ---
 
@@ -420,9 +427,11 @@ Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, 
 | Metodo | Path | Descrizione |
 |---|---|---|
 | `GET` | `/` | Serve `templates/index.html` |
-| `POST` | `/chat` | Riceve `{message, session_id}`, risponde in SSE con eventi `token`, `thinking`, `done` |
+| `POST` | `/chat` | Riceve `{message, session_id, images?}`, risponde in SSE con eventi `token`, `thinking`, `done` |
 | `GET` | `/sessions` | Restituisce lista delle ultime 5 sessioni salvate su disco |
 | `DELETE` | `/session/<id>` | Elimina il file sessione dal disco e rimuove la Memory dal dizionario |
+
+**Gestione immagini in `/chat`:** accetta il campo opzionale `images` — lista di data URI base64 (`data:image/jpeg;base64,...`). Permette invio senza testo se almeno un'immagine è presente. Passa la lista a `chat_stream(images=...)` che smista al modello vision.
 
 **`_get_memory(session_id)`:** recupera la Memory dal dizionario; se non esiste la crea, e se esiste un file sessione corrispondente lo carica automaticamente da disco.
 
@@ -475,7 +484,11 @@ python app.py
 
 SPA unica. Contiene solo il markup HTML strutturale — nessuna logica. Carica `style.css` e `app.js`. Il DOM viene popolato interamente da `app.js` a runtime.
 
-Struttura: `#topbar` (logo, `#btn-info`, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (textarea + pulsante invia) → `#info-overlay` (modal info, nascosto di default).
+Struttura: `#topbar` (logo, `#btn-info`, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (`#img-preview-strip` + `#input-bar`: pulsante allega, textarea, pulsante invia) → `#info-overlay` (modal info, nascosto di default).
+
+**Elementi aggiunti per immagini:**
+- `#img-preview-strip` — div sopra l'input bar che mostra le anteprime delle immagini selezionate (nascosto quando vuoto via `:empty`)
+- `#btn-attach` — label che wrappa l'`<input type="file" id="img-input" accept="image/*" multiple>` nascosto; click sul label apre il selettore file nativo
 
 **Elementi aggiunti:**
 - `#btn-info` — pulsante `ⓘ` accanto al logo, apre il modal info
@@ -507,6 +520,15 @@ Tema scuro completo. Usa variabili CSS (`--bg`, `--bubble-bg`, `--bubble-text`, 
 
 Elementi principali: `#topbar`, `.tab`, `.tab.active`, `.bubble-user`, `.bubble-ai`, `.spinner`, `#color-dot`, `#color-picker`, `.preset-dot`.
 
+**Classi aggiunte per immagini:**
+- `#btn-attach` — icona SVG cliccabile, colore dimmer con hover; wrappa l'input file nascosto
+- `#img-preview-strip` — flex row con gap; nascosto automaticamente quando vuoto (`:empty { display: none }`)
+- `.img-preview-wrap` — container relativo per thumbnail + bottone rimozione
+- `.img-preview-thumb` — 58×58px, `object-fit: cover`, bordo sottile, border-radius 7px
+- `.img-preview-rm` — cerchio 17×17px in posizione assoluta top-right, bottone ×
+- `.bubble-imgs` — strip orizzontale di immagini dentro la bolla utente, flex + gap
+- `.bubble-img` — immagine nella bolla, max 180×180px, border-radius 8px, `cursor: pointer`
+
 **Elementi aggiunti:**
 - `#btn-info` — stesso stile di `#btn-new` (niente bordo, colore dimmer, hover)
 - `#info-overlay` / `#info-modal` — overlay fisso z-index 300, modal `#161616` con box-shadow
@@ -529,8 +551,19 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 | Messaggi e localStorage | `appendMessage`, `buildBubble`, `loadMessages`, `saveMessages`, `renderChat` |
 | Streaming SSE | `sendMessage` — legge il body come stream, aggiorna la bolla AI token per token |
 | Color picker | `setColor`, `loadColor`, `applyBubbleColor`, `updateColorDot`, `buildPresets` |
+| Immagini | `renderImagePreviews`, `updateChatBottom`, listener su `imgInput` |
 
 **Persistenza locale:** i messaggi di ogni chat sono in `localStorage` con chiave `chat_<session_id>`. Il colore bolla è in `bubble_color_<session_id>`. Al ricaricamento tutto viene ripristinato.
+
+**Gestione immagini:**
+- `selectedImages` — array di stato globale `[{file, dataUrl}]`, max 3 elementi
+- `imgInput` change listener — converte ogni `File` in data URI via `FileReader.readAsDataURL`, aggiunge a `selectedImages`, chiama `renderImagePreviews`
+- `renderImagePreviews()` — svuota e ricostruisce `#img-preview-strip`; ogni thumb ha un bottone × che rimuove l'elemento dall'array e ridisegna
+- `updateChatBottom()` — misura `offsetHeight` di `#input-wrap` e lo imposta come `bottom` di `#chat-area`, necessario perché il preview strip cresce dinamicamente
+- `buildBubble(role, content, images=[])` — se `images` non è vuoto, crea `.bubble-imgs` con i tag `<img>` prima del testo nella bolla utente
+- `sendMessage` — raccoglie `selectedImages`, li svuota prima dell'invio, salva in localStorage solo il testo (o placeholder `[N immagini allegate]`), costruisce la bolla con le immagini reali, include `images: imagesToSend.map(i => i.dataUrl)` nel payload JSON verso `/chat`
+
+**Nota localStorage:** le immagini non vengono salvate in localStorage (peso eccessivo). Al ricaricamento della pagina le bolle con immagini mostrano solo il testo placeholder; le immagini rimangono visibili solo durante la sessione corrente.
 
 **Elementi aggiunti:**
 - `btnInfo`, `infoOverlay`, `infoClose` — DOM refs per il modal info
@@ -612,6 +645,10 @@ pywebview
 
 **Dipendenze aggiunte per app desktop:**
 - `pywebview` — finestra WebKit nativa su macOS; installa automaticamente `pyobjc-core`, `pyobjc-framework-WebKit`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz` e `bottle`
+
+**Dipendenze per immagini:**
+- Nessun pacchetto Python aggiuntivo — la conversione in base64 avviene interamente nel browser (JS `FileReader`); il payload arriva al backend come stringa e viene passato direttamente all'API OpenAI nel formato multimodale già supportato dall'SDK (`openai>=1.0`)
+- Richiede **modello vision su Ollama**: `ollama pull llava` (o qualsiasi altro modello vision-capable — cambiare `VISION_MODEL` in `config.py`)
 
 **Dipendenze aggiunte per RaxeusLyric** (installate nel venv, non ancora in requirements.txt):
 

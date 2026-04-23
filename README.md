@@ -32,6 +32,7 @@ Compatibile con **macOS**, **Windows** e **Linux**.
 - **Memoria conversazionale** — tutta la cronologia viene mantenuta e passata al modello ad ogni turno
 - **Sessioni persistenti** — le conversazioni possono essere salvate su file JSON e ricaricate in sessioni successive
 - **Interfaccia web** — tab multiple, ricerca nelle chat, color picker per la bolla utente
+- **Caricamento immagini** — allega fino a 3 foto per messaggio; il modello vision le analizza e risponde, anche senza testo
 
 ### Tool disponibili
 
@@ -110,10 +111,11 @@ RaxeusAI/
 
 - Python 3.10+
 - [Ollama](https://ollama.com) installato e in esecuzione
-- Il modello configurato scaricato localmente (default: `qwen3:8b`)
+- Modello testo (default: `qwen3:8b`) e modello vision (default: `llava`) scaricati localmente
 
 ```bash
 ollama pull qwen3:8b
+ollama pull llava
 ```
 
 ---
@@ -194,13 +196,14 @@ python app.py
 Tutte le impostazioni principali si trovano in `config.py`:
 
 ```python
-MODEL = "qwen3:8b"                        # Modello Ollama da usare
+MODEL = "qwen3:8b"                        # Modello Ollama per il testo
+VISION_MODEL = "llava"                    # Modello Ollama per le immagini
 OLLAMA_URL = "http://localhost:11434/v1"  # Endpoint API
 AI_NAME = "Raxeus"                        # Nome dell'assistente
 SYSTEM_PROMPT = "..."                     # Personalità e istruzioni base
 ```
 
-Per cambiare modello basta modificare `MODEL`. Qualsiasi modello disponibile su Ollama con supporto al function calling è compatibile.
+`MODEL` deve supportare function calling. `VISION_MODEL` può essere qualsiasi modello vision disponibile su Ollama (`llava`, `moondream`, `minicpm-v`, `qwen2-vl`, ecc.).
 
 ---
 

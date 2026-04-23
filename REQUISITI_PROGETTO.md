@@ -56,8 +56,9 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 6. Interfaccia web con tab multiple, barra di ricerca e color picker per le bolle utente.
 7. Rendering del markdown nelle risposte (titoli, codice, tabelle, grassetto).
 8. Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `esci`.
-9. Modulo RaxeusLyric: identificazione della canzone in riproduzione, recupero e visualizzazione del testo sincronizzato.
-10. App desktop nativa su macOS tramite pywebview (`launcher.py` + `create_app.sh`).
+9. Caricamento di fino a 3 immagini per messaggio; il modello vision le analizza e risponde anche in assenza di testo.
+10. Modulo RaxeusLyric: identificazione della canzone in riproduzione, recupero e visualizzazione del testo sincronizzato.
+11. App desktop nativa su macOS tramite pywebview (`launcher.py` + `create_app.sh`).
 
 ### 4.2 User stories
 
@@ -67,6 +68,7 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 - L'utente ritrova una conversazione passata cercandola per parola chiave.
 - L'utente personalizza il colore delle bolle dei messaggi per ogni chat.
 - Le conversazioni vengono salvate automaticamente e ricaricate al prossimo avvio.
+- L'utente allega fino a 3 immagini a un messaggio; l'assistente ne analizza il contenuto e risponde anche senza testo di accompagnamento.
 - L'utente visualizza i testi della canzone in riproduzione sincronizzati in tempo reale.
 
 ## 5. Requisiti non funzionali
