@@ -1,108 +1,101 @@
-# Documento dei Requisiti
+# Documento dei Requisiti — RaxeusAI
 
-> Questo documento descrive il progetto **RaxeusAI** realizzato per il modulo `03_Sviluppo_Web_e_Database`.
-> RaxeusAI è un assistente AI personale con interfaccia web, costruito in Python/Flask con integrazione al modello linguistico locale tramite Ollama.
-> Il progetto nasce come iniziativa personale e viene successivamente adottato come progetto scolastico di fine anno.
+> Progetto di fine anno per il modulo `03_Sviluppo_Web_e_Database`.
+> **RaxeusAI** è un assistente AI personale con interfaccia web, sviluppato in Python/Flask con integrazione a un modello linguistico locale tramite Ollama.
 
 ## 1. Introduzione
 
 ### 1.1 Scopo del documento
 
-Lo scopo di questo documento è:
-- descrivere in modo chiaro il prodotto realizzato;
-- raccogliere i requisiti funzionali e non funzionali;
-- fornire una prima progettazione concettuale e una roadmap di lavoro con diagrammi ER, UML e casi d'uso, organizzata nelle fasi di analisi, sviluppo e rifinitura;
-- definire una roadmap di lavoro con milestone e attività principali.
+Questo documento:
+- descrive il prodotto realizzato dallo studente Alberto Bruscolini;
+- raccoglie i requisiti funzionali e non funzionali;
+- presenta i diagrammi ER, UML e casi d'uso organizzati nelle fasi di analisi, sviluppo e rifinitura;
+- definisce la roadmap di lavoro con milestone e Gantt.
 
 ### 1.2 Contesto
 
-RaxeusAI nasce come * *progetto personale** — sviluppato autonomamente per uso privato — e viene successivamente adottato come **progetto scolastico di fine anno** per il modulo `03_Sviluppo_Web_e_Database`. Questa doppia origine ha permesso di lavorare su un prodotto reale e funzionante fin dall'inizio, anziché su un esercizio accademico costruito ad hoc.
+RaxeusAI è un'applicazione web completa con backend in Python/Flask, interfaccia dinamica con streaming in tempo reale e integrazione con un LLM locale tramite Ollama.
 
-Il progetto dimostra la realizzazione di un'applicazione web completa con:
-- backend in Python/Flask;
-- interfaccia web dinamica con streaming e aggiornamenti in tempo reale;
-- persistenza dei dati su file;
-- integrazione con un modello di linguaggio (LLM) locale tramite Ollama.
-
-Il progetto non utilizza un database relazionale tradizionale: la persistenza delle conversazioni è affidata a file JSON, scelta motivata dalla natura single-user dell'applicazione e dall'assenza di relazioni complesse tra dati strutturati.
+La persistenza non utilizza un database relazionale: le conversazioni sono salvate come file JSON nella cartella `sessions/`, scelta adeguata alla natura single-user dell'applicazione.
 
 ### 1.3 Tema
 
-Tema scelto: **RaxeusAI**.
-RaxeusAI è un assistente AI personale che gira localmente sul Mac tramite Ollama. Risponde in streaming, usa tool reali in autonomia (ricerca web, esecuzione Python, lettura file, PDF, Wikipedia) e dispone di un'interfaccia web con tab multiple e personalizzazione grafica.
+**RaxeusAI** è un assistente AI personale che gira localmente tramite Ollama. Risponde in streaming token per token, esegue tool reali in autonomia e dispone di un'interfaccia web con tab multiple e personalizzazione grafica. Include il modulo **RaxeusLyric** per la visualizzazione sincronizzata dei testi delle canzoni in riproduzione, ed è disponibile come app desktop nativa su macOS tramite pywebview.
 
-## 2. Obiettivi generali
+## 2. Obiettivi
 
 - Permettere all'utente di conversare con un LLM locale in tempo reale.
-- Rispondere in streaming token per token per un'esperienza fluida.
-- Eseguire tool reali in autonomia: ricerca web, esecuzione di codice Python, lettura/scrittura file, lettura PDF, ricerca Wikipedia, data e ora.
-- Mantenere la memoria conversazionale multi-turno all'interno di una sessione.
-- Salvare e ricaricare le sessioni di chat passate.
-- Offrire un'interfaccia web con tab multiple, ricerca nelle chat, tema scuro e personalizzazione del colore delle bolle.
-- Offrire anche un'interfaccia da terminale per uso rapido.
+- Rispondere in streaming token per token.
+- Eseguire tool reali in autonomia: ricerca web, esecuzione Python, lettura/scrittura file, lettura PDF, ricerca Wikipedia, data e ora, esplorazione directory, ricerca RAG su documenti locali.
+- Mantenere la memoria conversazionale multi-turno nella sessione corrente.
+- Salvare e ricaricare sessioni di chat passate.
+- Offrire un'interfaccia web con tab multiple, ricerca nelle chat, tema scuro e color picker per le bolle.
+- Offrire un'interfaccia da terminale per uso rapido.
+- Visualizzare in tempo reale i testi sincronizzati della canzone in riproduzione su macOS.
 
 ## 3. Stakeholder e attori
 
 | Stakeholder | Ruolo | Interesse |
 | --- | --- | --- |
-| Sviluppatore | Alberto Bruscolini | Realizzare e mantenere il progetto |
+| Alberto Bruscolini | Sviluppatore | Realizzare e mantenere il progetto |
 | Docente | Valutatore | Verificare correttezza tecnica e completezza |
 | Utente finale | Utente singolo locale | Usare l'assistente per domande, ricerche e automazioni |
 
-### Attori principali
-
-- `Utente locale` (unico attore — app single-user senza autenticazione)
+**Attore principale:** `Utente locale` — l'applicazione è single-user e non prevede autenticazione.
 
 ## 4. Requisiti funzionali
 
 ### 4.1 Requisiti principali
 
-1. Invio di messaggi all'assistente AI e ricezione di risposte in streaming.
-2. Esecuzione autonoma di tool da parte dell'AI: ricerca web (Google, DuckDuckGo), lettura e scrittura file, esecuzione Python, lettura PDF, ricerca Wikipedia, data e ora corrente, esplorazione directory.
-3. Memoria conversazionale multi-turno: il modello ricorda l'intera conversazione nella sessione corrente.
+1. Invio di messaggi all'assistente e ricezione di risposte in streaming.
+2. Esecuzione autonoma di tool: ricerca web (Google e DuckDuckGo), lettura e scrittura file, esecuzione Python, lettura PDF, ricerca Wikipedia, data e ora, esplorazione directory, ricerca RAG su documenti locali.
+3. Memoria conversazionale multi-turno: l'intera cronologia viene mantenuta e passata al modello a ogni turno.
 4. Gestione di sessioni multiple: creazione, navigazione, eliminazione e ricerca tra le chat.
-5. Persistenza delle sessioni su file JSON: le conversazioni vengono salvate e ricaricate all'avvio.
-6. Interfaccia web con tab multiple (max 5 simultanee), barra di ricerca nelle chat e colore bolla personalizzabile.
-7. Rendering del markdown nelle risposte (titoli, codice, tabelle, grassetto, ecc.).
+5. Persistenza su file JSON: le sessioni sono salvate in `sessions/` e ricaricate automaticamente all'avvio.
+6. Interfaccia web con tab multiple, barra di ricerca e color picker per le bolle utente.
+7. Rendering del markdown nelle risposte (titoli, codice, tabelle, grassetto).
 8. Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `esci`.
+9. Modulo RaxeusLyric: identificazione della canzone in riproduzione, recupero e visualizzazione del testo sincronizzato.
+10. App desktop nativa su macOS tramite pywebview (`launcher.py` + `create_app.sh`).
 
 ### 4.2 User stories
 
-- Come **utente**, voglio inviare un messaggio e vedere la risposta apparire in tempo reale, parola per parola.
-- Come **utente**, voglio che l'assistente cerchi informazioni su internet senza doverlo chiedere esplicitamente.
-- Come **utente**, voglio avere più conversazioni aperte contemporaneamente in tab separate.
-- Come **utente**, voglio ritrovare una conversazione passata cercandola per parola chiave.
-- Come **utente**, voglio personalizzare il colore delle bolle dei messaggi per ogni chat.
-- Come **utente**, voglio che le mie conversazioni vengano salvate automaticamente e ricaricate al prossimo avvio.
+- L'utente invia un messaggio e vede la risposta apparire in tempo reale, token per token.
+- L'assistente cerca autonomamente informazioni su internet quando necessario, senza che l'utente lo richieda esplicitamente.
+- L'utente mantiene più conversazioni aperte contemporaneamente in tab separate.
+- L'utente ritrova una conversazione passata cercandola per parola chiave.
+- L'utente personalizza il colore delle bolle dei messaggi per ogni chat.
+- Le conversazioni vengono salvate automaticamente e ricaricate al prossimo avvio.
+- L'utente visualizza i testi della canzone in riproduzione sincronizzati in tempo reale.
 
 ## 5. Requisiti non funzionali
 
-- L'app deve girare localmente senza connessione obbligatoria (il modello AI è locale via Ollama).
-- Le risposte devono essere trasmesse in streaming tramite Server-Sent Events (SSE).
-- Il backend deve essere realizzato con Python/Flask.
-- Il progetto deve essere eseguibile localmente con un ambiente virtuale Python (`venv`).
-- L'interfaccia web deve avere tema scuro e layout reattivo.
-- Le sessioni devono essere persistenti tra un avvio e l'altro (file JSON nella cartella `sessions/`).
-- Il codice deve essere organizzato in moduli separati con responsabilità chiare.
+- L'applicazione funziona localmente senza connessione obbligatoria (il modello è locale via Ollama).
+- Le risposte sono trasmesse in streaming tramite Server-Sent Events (SSE).
+- Il backend è realizzato con Python/Flask.
+- Il progetto è eseguibile con un ambiente virtuale Python (`venv`).
+- L'interfaccia web ha tema scuro e layout responsivo.
+- Le sessioni sono persistenti tra un avvio e l'altro.
+- Il codice è organizzato in moduli separati con responsabilità chiare.
 
-## 6. Glossario dei termini
+## 6. Glossario
 
-- `LLM`: Large Language Model — modello di linguaggio di grandi dimensioni che genera testo.
-- `Ollama`: strumento che permette di eseguire LLM localmente sul proprio computer.
-- `Tool calling`: capacità del modello di richiamare funzioni esterne (tool) durante la generazione della risposta.
-- `Streaming`: tecnica che invia la risposta al client token per token, man mano che viene generata.
-- `SSE` (Server-Sent Events): protocollo HTTP che permette al server di inviare aggiornamenti in tempo reale al browser.
-- `Sessione`: una conversazione singola con l'assistente, identificata da un UUID e salvata come file JSON.
+- `LLM`: Large Language Model — modello di linguaggio che genera testo.
+- `Ollama`: strumento per eseguire LLM localmente sul proprio computer.
+- `Tool calling`: capacità del modello di richiamare funzioni esterne durante la generazione della risposta.
+- `Streaming`: tecnica che invia la risposta token per token man mano che viene generata.
+- `SSE` (Server-Sent Events): protocollo HTTP per aggiornamenti in tempo reale dal server al browser.
+- `Sessione`: conversazione singola identificata da UUID, salvata come file JSON.
 - `Memoria conversazionale`: cronologia dei messaggi della sessione corrente, passata al modello a ogni turno.
-- `Tab`: scheda nell'interfaccia web che rappresenta una sessione di chat aperta.
+- `RAG` (Retrieval-Augmented Generation): ricerca su documenti locali indicizzati in ChromaDB, utilizzata come tool dall'agente.
+- `Tab`: scheda nella web UI che rappresenta una sessione di chat aperta.
 
 ## 7. Modello dei dati
 
-RaxeusAI non utilizza un database relazionale. La persistenza è gestita tramite file JSON nella cartella `sessions/`. Di seguito la struttura dei dati principali.
+La persistenza è gestita tramite file JSON nella cartella `sessions/`. Lo schema ER seguente rappresenta le entità e le relazioni in forma concettuale.
 
-### 7.0 Schema ER concettuale
-
-Sebbene la persistenza sia su file JSON, è possibile rappresentare le entità principali e le loro relazioni come schema concettuale equivalente a un ER.
+### 7.1 Schema ER concettuale
 
 ```mermaid
 erDiagram
@@ -139,7 +132,7 @@ erDiagram
     SESSIONE ||--o| PREFERENZA_BOLLA : ha
 ```
 
-### Struttura di una sessione (file JSON)
+### 7.2 Struttura di una sessione (file JSON)
 
 ```json
 {
@@ -163,7 +156,7 @@ erDiagram
 }
 ```
 
-### Dati nel browser (localStorage)
+### 7.3 Dati nel browser (localStorage)
 
 | Chiave | Valore |
 | --- | --- |
@@ -198,6 +191,7 @@ classDiagram
         +run_python(code) str
         +read_pdf(path) str
         +wikipedia_search(query, lang) str
+        +rag_search(query) str
         +list_dir(path) str
         +get_datetime() str
         +execute_tool(name, args) str
@@ -235,35 +229,32 @@ classDiagram
 8. `Personalizza colore bolla`
 9. `Carica sessione passata`
 
-### 9.2 Descrizione semplificata dei casi d'uso
+### 9.2 Descrizione dei casi d'uso
 
-- **Invia messaggio**: l'utente digita un testo e preme Invio o il pulsante "invia"; il frontend invia la richiesta via POST a `/chat` con il testo e l'ID sessione.
+- **Invia messaggio**: l'utente digita un testo e preme Invio; il frontend invia la richiesta via POST a `/chat` con testo e ID sessione.
 - **Ricevi risposta in streaming**: il backend apre una connessione SSE e invia token per token; il frontend aggiorna la bolla in tempo reale.
-- **Esecuzione automatica tool**: durante la generazione, il modello decide autonomamente di chiamare un tool (es. `google_search`); il backend esegue il tool e rimanda il risultato al modello prima di continuare la risposta.
+- **Esecuzione automatica tool**: durante la generazione il modello decide autonomamente di chiamare un tool (es. `google_search`); il backend esegue il tool e rimanda il risultato al modello prima di continuare la risposta.
 - **Apri nuova chat**: l'utente clicca `+`; viene creata una nuova tab con UUID univoco e titolo automatico al primo messaggio.
 - **Cerca tra le chat**: l'utente digita nella barra di ricerca; le tab vengono filtrate in tempo reale per titolo.
-- **Personalizza colore bolla**: l'utente clicca il pallino colorato in alto a destra, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
+- **Personalizza colore bolla**: l'utente clicca il pallino colorato, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
+- **Carica sessione passata**: l'utente seleziona una sessione salvata dalla lista; la cronologia viene ripristinata nella tab corrente.
 
 ### 9.3 Relazioni tra casi d'uso: include ed extend
 
-In un diagramma dei casi d'uso si usano due tipi di relazioni aggiuntive:
+- `<<include>>`: comportamento obbligatorio sempre eseguito all'interno del caso d'uso base.
+- `<<extend>>`: comportamento opzionale che si aggiunge al caso d'uso base solo in certe condizioni.
 
-- `<<include>>`: rappresenta un comportamento obbligatorio riutilizzabile. Un caso d'uso base include un altro caso d'uso quando il suo comportamento è sempre eseguito.
-- `<<extend>>`: rappresenta un comportamento opzionale o alternativo che si aggiunge al caso d'uso base solo in certe condizioni.
+Relazioni principali:
 
-Per RaxeusAI, le relazioni principali sono:
+- `Invia messaggio` <<include>> `Ricevi risposta in streaming`: ogni messaggio produce sempre una risposta in streaming.
+- `Ricevi risposta in streaming` <<include>> `Esecuzione automatica tool`: il tool calling è parte integrante del ciclo di risposta ogni volta che il modello lo attiva.
 
-- `Invia messaggio` <<include>> `Ricevi risposta in streaming`: ogni messaggio inviato produce sempre una risposta in streaming.
-- `Ricevi risposta in streaming` <<include>> `Esecuzione automatica tool`: durante la generazione il modello può chiamare tool; questo passaggio è parte integrante del flusso di risposta ogni volta che il modello lo decide.
-
-Esempi di `extend`:
+Relazioni extend:
 
 - `Carica sessione passata` <<extend>> `Apri nuova chat`: l'utente può aprire una chat preesistente invece di crearne una nuova.
-- `Personalizza colore bolla` <<extend>> `Apri nuova chat`: la personalizzazione del colore è opzionale e si attiva solo se l'utente lo desidera dopo aver aperto una chat.
+- `Personalizza colore bolla` <<extend>> `Apri nuova chat`: la personalizzazione del colore è opzionale e disponibile dopo aver aperto una chat.
 
 ### 9.4 Diagramma dei casi d'uso
-
-Il diagramma è stato generato a partire dal file PlantUML `REQUISITI_UseCase.puml`.
 
 ```plantuml
 @startuml uc
@@ -292,14 +283,14 @@ Utente --> (Carica sessione passata)
 | --- | --- |
 | 1 (14–18 apr) | Analisi requisiti, schema ER e UML, setup ambiente (Ollama, venv, Flask) |
 | 2 (22–25 apr) | Backend: memoria conversazionale e agent loop con streaming |
-| 3 (28 apr–2 mag) | Tool calling: web search, file, Python, PDF, Wikipedia |
+| 3 (28 apr–2 mag) | Tool calling: web search, file, Python, PDF, Wikipedia, RAG |
 | 4 (5–9 mag) | Web UI: template HTML, streaming SSE |
 | 5 (12–16 mag) | Tab management, color picker, markdown rendering |
 | 6 (19–31 mag) | Testing, correzioni bug, documentazione, consegna su GitHub |
 
 **Consegna prevista: 31 maggio 2026.**
 
-### 10.1 Gantt semplificato
+### 10.1 Gantt
 
 ```mermaid
 gantt
@@ -321,5 +312,3 @@ gantt
     Test e doc           :d2, after d1, 12d
     Consegna             :d3, 2026-05-31, 1d
 ```
-
-
