@@ -7,3 +7,9 @@ pypdf
 flask
 chromadb
 pywebview
+yt-dlp
+openai-whisper
+pillow
+
+# Build tool desktop (solo Windows: usato da create_app.ps1)
+pyinstaller; platform_system == "Windows"

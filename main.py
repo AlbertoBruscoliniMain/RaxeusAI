@@ -2,7 +2,7 @@ from agent import chat, reset, memory
 from sessions import save_session, list_sessions, load_session
 from config import AI_NAME
 
-HELP = "Comandi: 'esci'  'reset'  'salva'  'sessioni'  'carica <N>'"
+HELP = "Comandi: 'esci'  'reset'  'salva'  'sessioni'  'carica <N>'  'doctor'  'hardware'"
 
 print(f"=== {AI_NAME} ===")
 print(f"{HELP}\n")
@@ -23,6 +23,18 @@ while True:
 
     if user.lower() == "reset":
         reset()
+        continue
+
+    if user.lower() == "doctor":
+        from doctor import run as run_doctor
+        run_doctor()
+        print()
+        continue
+
+    if user.lower() == "hardware":
+        from hardware import summary
+        print(summary())
+        print()
         continue
 
     if user.lower() == "salva":

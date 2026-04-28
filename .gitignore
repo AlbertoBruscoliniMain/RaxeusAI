@@ -5,3 +5,5 @@ __pycache__/
 sessions/
 .superpowers/
 rag_db/
+lyrics_output/
+temp_audio/

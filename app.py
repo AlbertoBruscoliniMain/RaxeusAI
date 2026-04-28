@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from flask import Flask, request, Response, render_template, jsonify, send_file, stream_with_context
 from memory import Memory
-from agent import chat_stream
+from agent import chat_stream, generate_title
 from sessions import save_session, list_sessions, load_session
 from lyric_downloader import download_audio
 from lyric_transcriber import get_transcription
@@ -65,6 +65,16 @@ def chat():
 @app.route("/sessions")
 def get_sessions():
     return jsonify(list_sessions()[:5])
+
+
+@app.route("/title", methods=["POST"])
+def get_title():
+    data = request.get_json()
+    first_message = (data.get("first_message") or "").strip()
+    if not first_message:
+        return jsonify({"title": "Nuova chat"})
+    title = generate_title(first_message)
+    return jsonify({"title": title})
 
 
 @app.route("/session/<session_id>", methods=["DELETE"])

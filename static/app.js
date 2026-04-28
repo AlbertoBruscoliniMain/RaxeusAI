@@ -148,6 +148,7 @@ function buildBubble(role, content, images = []) {
     const b = document.createElement('div');
     b.className = 'bubble-ai';
     b.innerHTML = marked.parse(content);
+    renderMath(b);
     wrap.appendChild(av);
     wrap.appendChild(b);
   }
@@ -228,8 +229,10 @@ async function sendMessage() {
   selectedImages = [];
   renderImagePreviews();
 
-  // Titolo automatico al primo messaggio
-  if (loadMessages(activeId).length === 0) {
+  const isFirstMessage = loadMessages(activeId).length === 0;
+
+  // Titolo provvisorio al primo messaggio (verrà aggiornato dall'AI dopo la risposta)
+  if (isFirstMessage) {
     const title = text || `[${imagesToSend.length} immagini]`;
     tabs = tabs.map(t => t.id === activeId ? { ...t, title: title.slice(0, 30) } : t);
     renderTabs();
@@ -306,12 +309,26 @@ async function sendMessage() {
         }
         aiContent += evt.content;
         aiBubble.innerHTML = marked.parse(aiContent);
+        renderMath(aiBubble);
         scrollBottom();
       } else if (evt.type === 'done') {
         if (aiBubble) {
           const msgs = loadMessages(activeId);
           msgs.push({ role: 'assistant', content: aiContent });
           saveMessages(activeId, msgs);
+        }
+        if (isFirstMessage && text) {
+          const sessionId = activeId;
+          fetch('/title', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ first_message: text }),
+          }).then(r => r.json()).then(d => {
+            if (d.title) {
+              tabs = tabs.map(t => t.id === sessionId ? { ...t, title: d.title } : t);
+              renderTabs();
+            }
+          }).catch(() => {});
         }
       }
     }
@@ -448,6 +465,19 @@ async function loadInfoCards() {
 
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMath(el) {
+  if (!window._katexReady || typeof renderMathInElement === 'undefined') return;
+  renderMathInElement(el, {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '$', right: '$', display: false },
+      { left: '\\(', right: '\\)', display: false },
+      { left: '\\[', right: '\\]', display: true },
+    ],
+    throwOnError: false,
+  });
 }
 
 // ── RAXEUS LYRIC BUTTON ───────────────────────────────────────────────────────

@@ -80,8 +80,9 @@ def write_file(path: str, content: str) -> str:
 def run_python(code: str) -> str:
     try:
         result = subprocess.run(
-            ["python3", "-c", code],
-            capture_output=True, text=True, timeout=10
+            [sys.executable, "-c", code],
+            capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
         )
         output = result.stdout or result.stderr or "(nessun output)"
         return output[:2000]

@@ -34,7 +34,13 @@ RaxeusAI/
 │
 ├── launcher.py             → entry point desktop: avvia Flask in thread + finestra nativa pywebview
 ├── create_app.sh           → script una-tantum: crea RaxeusAI.app sul Desktop (icona + bundle macOS)
+├── create_app.ps1          → script una-tantum: crea RaxeusAI.exe sul Desktop (PyInstaller, Windows)
 ├── AppIcon.icns            → icona macOS generata da create_app.sh (non committare)
+├── AppIcon.ico             → icona Windows generata da create_app.ps1 (non committare)
+│
+├── hardware.py             → rilevamento CPU/RAM/GPU + raccomandazione modello (idea da OpenJarvis)
+├── loop_guard.py           → blocca loop degenerati nel tool calling (idea da OpenJarvis)
+├── doctor.py               → diagnostica del sistema (idea da OpenJarvis)
 │
 ├── rag_db/                 → generata a runtime — database vettoriale ChromaDB (persistent)
 ├── lyrics_output/          → generata a runtime
@@ -104,6 +110,7 @@ class Memory:
 **Modifiche rispetto alla versione base:**
 - Aggiunti `add_assistant_tool_calls` e `add_tool_result` per supportare il protocollo di function calling
 - Aggiunto `load` per il caricamento delle sessioni salvate
+- **Compressione automatica del context** (idea da OpenJarvis `LoopGuard.compress_context`): quando la cronologia supera `MAX_CONTEXT_MESSAGES` (default 100), `get()` restituisce una versione compressa — i tool result vecchi (prima metà) diventano `[risultato tool troncato]` e si applica una sliding window. Il messaggio system viene sempre preservato. Vedi [JARVIS_INSPIRATION.md](JARVIS_INSPIRATION.md).
 
 ---
 
@@ -145,6 +152,16 @@ def reset(): ...
 - Rimossi print di debug dei tool call (fix BUG-002)
 - `memory` è esposto a livello di modulo per permettere a `main.py` di importarlo per le sessioni
 - Aggiunto `chat_stream` per la web UI (vedi sotto)
+- **Esecuzione parallela dei tool call** (idea da OpenJarvis OrchestratorAgent): quando il modello emette più tool nello stesso turno, vengono lanciati con `concurrent.futures.ThreadPoolExecutor` mantenendo l'ordine. Vedi [JARVIS_INSPIRATION.md](JARVIS_INSPIRATION.md).
+- **LoopGuard** (idea da OpenJarvis): blocca chiamate identiche ripetute, pattern ping-pong A-B-A-B e budget per tool. Implementato in [loop_guard.py](../loop_guard.py). Resettato a ogni `reset()` e all'inizio di ogni `chat_stream`.
+
+**`generate_title(first_message: str) -> str`:** genera un titolo breve (max 4 parole) per una nuova chat dato il primo messaggio dell'utente. Fa una chiamata sincrona al modello senza tool e senza system prompt, poi:
+- Rimuove eventuali tag `<think>...</think>` emessi dal modello (Qwen3 in thinking mode)
+- Stripping di virgolette/apostrofi
+- Tronca a 40 caratteri
+- Fallback al testo grezzo se la chiamata fallisce
+
+Viene richiamata dalla route `/title` di `app.py` al termine della prima risposta AI.
 
 **`chat_stream(user_input, mem, images=None)`:** versione generator di `chat` per la web UI. Invece di stampare su stdout, yielda dizionari:
 - `{"type": "token", "content": "..."}` — per ogni chunk di testo generato
@@ -265,6 +282,19 @@ def download_audio(query: str) -> tuple[str, dict]
 ```
 
 Cerca `ytsearch1:<query>` su YouTube, scarica solo la traccia audio nel miglior formato disponibile e la converte in mp3 a 192kbps via FFmpeg postprocessor. L'output va in `temp_audio/` (cartella temporanea dentro RaxeusAI). Restituisce `(file_path, metadata)` dove metadata contiene artista, titolo e URL thumbnail estratti dai metadati YouTube.
+
+**Fix ffmpeg su macOS:** `yt-dlp` usa FFmpeg per la conversione audio, ma il processo Python non eredita il PATH di Homebrew (`/opt/homebrew/bin`). Il path viene passato esplicitamente tramite l'opzione `ffmpeg_location`:
+
+```python
+ffmpeg_location = "/opt/homebrew/bin"
+ydl_opts = {
+    ...
+    "ffmpeg_location": ffmpeg_location,
+    ...
+}
+```
+
+Senza questo fix il download fallisce con `ERROR: Postprocessing: ffprobe and ffmpeg not found` anche se ffmpeg è installato.
 
 ---
 
@@ -418,6 +448,34 @@ bash create_app.sh
 
 ---
 
+## create_app.ps1
+
+Equivalente Windows di `create_app.sh`. Genera `RaxeusAI\RaxeusAI.exe` sul Desktop usando **PyInstaller**.
+
+**Fasi:**
+
+| Step | Operazione |
+|---|---|
+| 1 | Conversione `static/logo.png` → `AppIcon.ico` (multi-size: 16/32/48/64/128/256) con Pillow |
+| 2 | `pip install --quiet --upgrade pyinstaller pillow` nel venv |
+| 3 | Lancia PyInstaller con `--windowed`, `--icon AppIcon.ico`, `--add-data templates;templates`, `--add-data static;static` e gli `--hidden-import` (`openai`, `flask`, `webview`, `chromadb`, `pypdf`, `ddgs`, `googlesearch`, `yt_dlp`) |
+| 4 | Copia ricorsiva di `dist/RaxeusAI/` in `Desktop\RaxeusAI\` |
+
+**Uso:**
+```powershell
+cd $HOME\RaxeusAI
+powershell -ExecutionPolicy Bypass -File .\create_app.ps1
+```
+
+Lo script verifica la presenza di `venv\Scripts\python.exe` e si interrompe con istruzioni se manca. Pulisce `build\` e `dist\` a ogni esecuzione, quindi è sicuro rilanciarlo dopo modifiche.
+
+**Differenze rispetto a `create_app.sh`:**
+- Niente AppleScript/`sips`/`iconutil` — Pillow gestisce tutto cross-platform
+- Output è un `.exe` (con DLL accanto) invece di un bundle `.app`
+- Niente registrazione Launch Services — Windows non ne ha bisogno
+
+---
+
 ## app.py
 
 Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, Memory]` con una `Memory` attiva per ogni conversazione aperta nel browser.
@@ -428,6 +486,7 @@ Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, 
 |---|---|---|
 | `GET` | `/` | Serve `templates/index.html` |
 | `POST` | `/chat` | Riceve `{message, session_id, images?}`, risponde in SSE con eventi `token`, `thinking`, `done` |
+| `POST` | `/title` | Riceve `{first_message}`, chiama `generate_title()` e restituisce `{title}` — usato da `app.js` dopo la prima risposta |
 | `GET` | `/sessions` | Restituisce lista delle ultime 5 sessioni salvate su disco |
 | `DELETE` | `/session/<id>` | Elimina il file sessione dal disco e rimuove la Memory dal dizionario |
 
@@ -482,7 +541,11 @@ python app.py
 
 ## templates/index.html
 
-SPA unica. Contiene solo il markup HTML strutturale — nessuna logica. Carica `style.css` e `app.js`. Il DOM viene popolato interamente da `app.js` a runtime.
+SPA unica. Contiene solo il markup HTML strutturale — nessuna logica. Carica `style.css`, `app.js` e le librerie esterne. Il DOM viene popolato interamente da `app.js` a runtime.
+
+**Librerie esterne caricate:**
+- `marked.min.js` (CDN) — converte Markdown in HTML per le risposte AI
+- `katex.min.css` + `katex.min.js` + `auto-render.min.js` (CDN) — rendering LaTeX/KaTeX per le formule matematiche nelle risposte AI. Caricati con `defer`; `auto-render.min.js` setta `window._katexReady = true` nel suo `onload` per segnalare ad `app.js` che è pronto.
 
 Struttura: `#topbar` (logo, `#btn-info`, ricerca, tab, pallino colore) → `#chat-area` (messaggi) → `#input-wrap` (`#img-preview-strip` + `#input-bar`: pulsante allega, textarea, pulsante invia) → `#info-overlay` (modal info, nascosto di default).
 
@@ -573,7 +636,9 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 
 **Max 5 tab:** aprire la sesta chat chiude automaticamente la prima (la più vecchia).
 
-**Titolo automatico:** al primo invio, il titolo della tab si imposta con le prime 30 caratteri del messaggio utente.
+**Titolo automatico smart:** al primo invio, il titolo della tab viene impostato provvisoriamente con le prime 30 caratteri del messaggio utente. Quando arriva l'evento `done` della prima risposta, `sendMessage` chiama `/title` in background (fetch POST) con il primo messaggio; il server chiama `generate_title()` sul modello e restituisce un titolo breve (3-4 parole) che sostituisce quello provvisorio nella tab. La chiamata è fire-and-forget: eventuali errori non rompono il flusso.
+
+**Rendering LaTeX:** `renderMath(el)` chiama `renderMathInElement()` di KaTeX su ogni elemento `.bubble-ai` dopo `marked.parse()`. Supporta i delimitatori `$...$` (inline), `$$...$$` (display), `\(...\)` e `\[...\]`. Viene chiamata sia in `buildBubble` (messaggi caricati da localStorage) che nello streaming token-by-token.
 
 ---
 
@@ -614,6 +679,8 @@ print()      # newline finale
 | `salva` | Salva la conversazione corrente in `sessions/` |
 | `sessioni` | Lista le sessioni salvate con numero indice |
 | `carica <N>` | Carica la sessione numero N dalla lista |
+| `doctor` | Diagnostica completa: Python, Ollama, modelli, dipendenze (vedi `doctor.py`) |
+| `hardware` | Stampa CPU/RAM/GPU rilevati e suggerisce un modello |
 | qualsiasi testo | Inviato all'AI |
 
 **Modifiche rispetto alla versione base:**
@@ -636,7 +703,15 @@ pypdf
 flask
 chromadb
 pywebview
+yt-dlp
+openai-whisper
+pillow
+
+# Build tool desktop (solo Windows: usato da create_app.ps1)
+pyinstaller; platform_system == "Windows"
 ```
+
+Il marker `; platform_system == "Windows"` è una *environment marker* PEP 508: PyInstaller viene installato **solo su Windows**, mentre su macOS/Linux viene ignorato (il bundle Mac è generato da `create_app.sh`, che usa solo strumenti di sistema).
 
 **Dipendenze originali:** `duckduckgo-search`, `googlesearch-python`, `requests`, `beautifulsoup4` per ricerca web e fetch pagine; `pypdf` per PDF; `flask` per la web UI.
 
@@ -722,3 +797,80 @@ ollama serve
 source venv/bin/activate
 python launcher.py
 ```
+
+**Modalità desktop nativa (app Windows):**
+```powershell
+# Crea RaxeusAI\RaxeusAI.exe sul Desktop tramite PyInstaller:
+cd $HOME\RaxeusAI
+powershell -ExecutionPolicy Bypass -File .\create_app.ps1
+# Poi: doppio click su Desktop\RaxeusAI\RaxeusAI.exe
+
+# Avvio diretto senza exe:
+ollama serve
+.\venv\Scripts\activate
+python launcher.py
+```
+
+`create_app.ps1` genera l'icona `.ico` da `static/logo.png` con Pillow e poi invoca PyInstaller con `--windowed`, includendo `templates/` e `static/` come data, e dichiarando gli `--hidden-import` necessari (`openai`, `flask`, `webview`, `chromadb`, `pypdf`, `ddgs`, `googlesearch`, `yt_dlp`).
+
+---
+
+## hardware.py
+
+Rilevamento hardware + raccomandazione del modello Ollama. **Idea adattata da OpenJarvis** ([JARVIS_INSPIRATION.md](JARVIS_INSPIRATION.md)).
+
+```python
+from hardware import detect_hardware, recommend_model, summary
+
+hw = detect_hardware()
+# HardwareInfo(platform='darwin', cpu_brand='Apple M3', cpu_count=8, ram_gb=16.0, gpu=GpuInfo(...))
+
+recommend_model(hw)  # 'qwen3:4b'
+summary()            # stringa stampabile per il comando 'hardware'
+```
+
+| Funzione | Descrizione |
+|---|---|
+| `detect_hardware()` | Rileva piattaforma, CPU, core, RAM, GPU. Cross-platform: NVIDIA via `nvidia-smi`, Apple via `system_profiler`, RAM su Windows via `kernel32.GlobalMemoryStatusEx` con `ctypes` |
+| `recommend_model(hw)` | Sceglie il tier Qwen3 (`1.7b` / `4b` / `8b` / `14b` / `32b`) in base alla memoria disponibile (90% VRAM se GPU presente, altrimenti 80% RAM - 4GB) |
+| `summary()` | Stringa formattata per umani — usata dal comando `hardware` in `main.py` |
+
+---
+
+## loop_guard.py
+
+Protezione anti-loop sul tool calling. **Idea adattata da OpenJarvis**.
+
+```python
+from loop_guard import LoopGuard, LoopGuardConfig
+
+guard = LoopGuard()                              # config default
+verdict = guard.check_call("google_search", '{"query":"x"}')
+if verdict.blocked:
+    # tool result diventa "[Loop guard] {verdict.reason}"
+    ...
+guard.reset()                                    # all'inizio di ogni nuova conversazione
+```
+
+Pattern bloccati:
+1. **Hash identico ripetuto** > `max_identical_calls` (default 3) — rileva l'agente che chiama 5 volte di fila la stessa search.
+2. **Ping-pong** A-B-A-B su finestra di 6 — rileva oscillazione tra due tool.
+3. **Per-tool budget** > `per_tool_budget` (default 8) — limita uso ossessivo di un singolo tool.
+
+---
+
+## doctor.py
+
+Diagnostica del sistema RaxeusAI. **Idea adattata da OpenJarvis** (`jarvis doctor`).
+
+Eseguibile sia come `python doctor.py` che come comando `doctor` nella CLI di `main.py`. Verifica:
+
+| Check | Cosa controlla |
+|---|---|
+| Python | Versione >= 3.10 |
+| Hardware | CPU/RAM/GPU rilevati + modello suggerito (e nota se diverso da `config.MODEL`) |
+| Ollama | Raggiungibilità di `OLLAMA_URL` (chiama `GET /api/tags`) |
+| MODEL/VISION_MODEL | Presenza dei modelli configurati nella lista di Ollama |
+| Dipendenze | Presenza di `openai`, `flask`, `ddgs`, `googlesearch`, `requests`, `bs4`, `pypdf`, `chromadb`, `webview`, `yt_dlp` |
+
+Output a checklist con `✓ / ! / ✗`. Exit code `1` se ci sono fail critici, `0` altrimenti.

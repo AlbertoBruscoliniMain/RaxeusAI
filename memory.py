@@ -1,5 +1,8 @@
 from config import SYSTEM_PROMPT
 
+# Soglia oltre la quale comprimiamo il context (idea da OpenJarvis LoopGuard.compress_context).
+MAX_CONTEXT_MESSAGES = 100
+
 
 class Memory:
     def __init__(self):
@@ -24,7 +27,30 @@ class Memory:
         })
 
     def get(self) -> list:
-        return self.history
+        return self._compressed() if len(self.history) > MAX_CONTEXT_MESSAGES else self.history
+
+    def _compressed(self) -> list:
+        """
+        Comprime la cronologia mantenendo system + ultimi messaggi.
+        Tronca i tool result vecchi e riduce a una finestra scorrevole.
+        Idea adattata da OpenJarvis (LoopGuard.compress_context).
+        """
+        msgs = self.history
+        sys_msgs = [m for m in msgs if m.get("role") == "system"]
+        rest = [m for m in msgs if m.get("role") != "system"]
+
+        # Stage 1: tronca i contenuti dei tool result più vecchi della metà.
+        threshold = len(rest) // 2
+        for i, m in enumerate(rest):
+            if i < threshold and m.get("role") == "tool":
+                m["content"] = "[risultato tool troncato]"
+
+        # Stage 2: finestra scorrevole sui non-system.
+        window = MAX_CONTEXT_MESSAGES - len(sys_msgs)
+        if len(rest) > window:
+            rest = rest[-window:]
+
+        return sys_msgs + rest
 
     def load(self, messages: list):
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}] + messages

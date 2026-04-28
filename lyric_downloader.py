@@ -9,6 +9,8 @@ def download_audio(query: str) -> tuple:
     output_path = os.path.join(os.path.dirname(__file__), "temp_audio")
     os.makedirs(output_path, exist_ok=True)
 
+    ffmpeg_location = "/opt/homebrew/bin"
+
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": os.path.join(output_path, "%(title)s.%(ext)s"),
@@ -19,6 +21,7 @@ def download_audio(query: str) -> tuple:
                 "preferredquality": "192",
             }
         ],
+        "ffmpeg_location": ffmpeg_location,
         "default_search": "ytsearch1",
         "quiet": True,
         "no_warnings": True,

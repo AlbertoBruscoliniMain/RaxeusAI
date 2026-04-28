@@ -295,6 +295,120 @@ La restrizione si applica all'intero contesto del bundle: bash, Python, `cp` —
 
 Dopo qualsiasi spostamento del progetto è obbligatorio rieseguire `bash create_app.sh` — il bundle contiene path assoluti.
 
+### Bundle Windows (.exe)
+
+Su Windows non esiste un equivalente di `.app` — un'app si distribuisce come `.exe` (più eventuali DLL accanto). Il tool standard per impacchettare un progetto Python è **PyInstaller**: legge l'entry point, traccia tutti i moduli importati, e produce in `dist/<NomeApp>/` una cartella con l'`.exe` e tutte le DLL/dati necessari (incluso l'interprete Python embedded).
+
+`create_app.ps1` lo usa con i seguenti flag chiave:
+
+| Flag | Effetto |
+|---|---|
+| `--windowed` | Niente console nera che si apre dietro la finestra |
+| `--icon AppIcon.ico` | Imposta l'icona del file `.exe` |
+| `--add-data "templates;templates"` | Copia i template Flask nel bundle (separatore `;` su Windows) |
+| `--add-data "static;static"` | Copia CSS/JS/logo nel bundle |
+| `--hidden-import openai` (e altri) | Forza l'inclusione di pacchetti che PyInstaller non rileva da solo (caricati dinamicamente) |
+
+L'icona Windows è in formato `.ico`: contiene più risoluzioni (16/32/48/64/128/256) come `.icns` su Mac. Pillow la genera direttamente da `static/logo.png`.
+
+A differenza di macOS, Windows non ha TCC: il progetto può stare ovunque, anche su Desktop. La WebView nativa è **Edge WebView2** (Chromium), pre-installata su Windows 11. Su Windows 10 può essere necessario installare il [runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+
+---
+
+## Cross-platform — strategie applicate
+
+| Punto | Soluzione |
+|---|---|
+| Subprocess Python (`run_python` tool) | `sys.executable` invece di `python3` hardcoded — usa l'interprete del venv su qualsiasi OS |
+| Path file/directory | `os.path.join` ovunque, niente `/` o `\` letterali |
+| Rilevamento RAM | `sysctl` su macOS, `/proc/meminfo` su Linux, `ctypes.windll.kernel32.GlobalMemoryStatusEx` su Windows |
+| Rilevamento GPU | `nvidia-smi` (NVIDIA), `system_profiler` (Apple); fallback a CPU/RAM |
+| Bundle desktop | `create_app.sh` per `.app`, `create_app.ps1` per `.exe`; due percorsi separati che generano la stessa esperienza utente |
+| WebView | pywebview seleziona automaticamente WKWebView (Mac) o EdgeChromium (Win) o GTK/QtWebEngine (Linux) |
+| Encoding stdin/stdout subprocess | `encoding="utf-8", errors="replace"` per evitare crash con caratteri non-ASCII su Windows (default cp1252) |
+
+---
+
+## LoopGuard — proteggere l'agente dai loop
+
+Quando un LLM ha accesso a function calling, può cadere in pattern improduttivi:
+
+- **Stessa chiamata identica ripetuta** — l'agente cerca tre volte la stessa cosa perché non ha capito di averla già fatta.
+- **Ping-pong** — alternanza A → B → A → B (es. `web_search` poi `fetch_url` ripetuti senza ottenere informazioni nuove).
+- **Tool monomania** — l'agente chiama `google_search` 20 volte di seguito.
+
+`loop_guard.py` mantiene tre tracker:
+
+1. Un dizionario `hash → count` con SHA-256 di `name + arguments`. Se `count > max_identical_calls` (default 3) il guard blocca.
+2. Una `deque` con la sequenza dei tool name; se l'ultima finestra contiene un pattern A-B-A-B o A-B-C-A-B-C, blocca.
+3. Un dizionario `tool_name → count`; se un singolo tool supera `per_tool_budget` (default 8), blocca.
+
+Quando un guard blocca una chiamata, RaxeusAI non solleva un'eccezione — restituisce al modello un tool result del tipo `[Loop guard] Chiamata identica a 'X' ripetuta 4 volte (limite 3).`. Il modello legge il messaggio nello stesso flusso dei normali risultati e di solito cambia strategia da solo.
+
+L'idea è adattata da OpenJarvis ([JARVIS_INSPIRATION.md](JARVIS_INSPIRATION.md)) — versione Python pura, senza il backend Rust opzionale.
+
+---
+
+## Compressione del context
+
+Ad ogni turno passiamo al modello tutta la cronologia. Su Qwen3:8b la finestra di context è di 32k token, ma man mano che la conversazione cresce paghi:
+
+- **Latenza** crescente (più token = più tempo di prefill).
+- **Memoria** GPU/RAM per la KV cache.
+- **Costo cognitivo**: il modello si confonde con troppo storico.
+
+`memory.py` applica una compressione automatica quando i messaggi superano `MAX_CONTEXT_MESSAGES` (default 100):
+
+1. **Tronca i tool result vecchi**: i tool messages della prima metà della history vengono rimpiazzati con `[risultato tool troncato]` mantenendo `tool_call_id` e `name`.
+2. **Sliding window**: tiene il messaggio system + gli ultimi `MAX_CONTEXT_MESSAGES - 1` non-system.
+
+Il messaggio system (la personalità di Raxeus) **non viene mai compresso** — è ciò che definisce chi è l'AI, e perderlo significherebbe perdere lo stile delle risposte.
+
+L'idea è adattata da `LoopGuard.compress_context` di OpenJarvis. La versione di OpenJarvis ha 4 stage progressivi, qui ne usiamo 2 (sufficienti per chat consumer).
+
+---
+
+## Esecuzione parallela dei tool call
+
+Qwen3 (e altri modelli moderni) possono emettere più tool call nello stesso turno. Esempio: l'utente chiede *"Cosa dice Wikipedia su Tesla e quali sono le ultime notizie?"* — il modello restituisce due tool call (`wikipedia_search` + `google_search`) in un'unica risposta.
+
+L'implementazione naive le esegue **in serie**: prima Wikipedia (3s), poi Google (5s) → 8s totali.
+
+`agent.py` le esegue **in parallelo** con `concurrent.futures.ThreadPoolExecutor`, mantenendo l'ordine dei risultati per non confondere il modello sull'ordine dei tool. Tempo totale: `max(3s, 5s) = 5s`.
+
+Il guadagno cresce con il numero di tool call. La limitazione è che i tool I/O-bound (rete, file) traggono molto beneficio mentre tool CPU-bound (`run_python`) sono limitati dal GIL — ma in questo progetto i tool sono tutti I/O-bound, quindi il pattern paga.
+
+Idea presa da `OrchestratorAgent._run_function_calling` di OpenJarvis (sezione `parallel_tools`).
+
+---
+
+## Hardware detection — scegliere il modello giusto
+
+Un modello LLM ha bisogno di memoria sufficiente per i suoi pesi (in formato Q4_K_M, ~0.55 GB per miliardo di parametri). Su un Mac M3 16GB la VRAM è condivisa con la RAM (Unified Memory): Qwen3:8b occupa ~5GB, lasciandone 11 per il sistema. Su un PC con GPU NVIDIA 8GB dedicata, scegliere Qwen3:14b (~9GB) crasha in OOM.
+
+`hardware.py` rileva:
+
+- **Piattaforma**: `darwin` / `linux` / `windows` (`platform.system()`).
+- **CPU brand**: `sysctl` su Mac, `/proc/cpuinfo` su Linux, env var `PROCESSOR_IDENTIFIER` su Windows.
+- **RAM totale**: API native per ogni OS.
+- **GPU**: `nvidia-smi --query-gpu` per NVIDIA, `system_profiler SPDisplaysDataType` per Apple Silicon.
+
+E poi calcola la "memoria utilizzabile":
+- Se c'è una GPU con VRAM > 0 → `vram_gb * count * 0.9` (90%, lascia respiro al driver).
+- Altrimenti → `(ram_gb - 4) * 0.8` (80% della RAM dopo aver lasciato 4GB al sistema).
+
+Il risultato viene mappato a un tier:
+
+| Memoria utilizzabile | Modello suggerito |
+|---|---|
+| ≤ 8 GB | `qwen3:1.7b` |
+| ≤ 16 GB | `qwen3:4b` |
+| ≤ 32 GB | `qwen3:8b` |
+| ≤ 64 GB | `qwen3:14b` |
+| > 64 GB | `qwen3:32b` |
+
+Idea presa da `recommend_model` di OpenJarvis. Il loro tier table usa Qwen3.5 MoE (Mixture of Experts), qui usiamo Qwen3 dense — l'MoE ha qualità migliore per dimensione ma è più capriccioso da configurare.
+
 ---
 
 ## RaxeusLyric — modulo testi musicali sincronizzati
@@ -417,3 +531,7 @@ L'overlap (60 caratteri) evita di perdere contesto ai bordi dei chunk: se una fr
 | Tutor personalizzato | system prompt specifico + fine-tuning |
 | RAG (risponde su documenti tuoi) | **già implementato** — usa `rag_index.py` per indicizzare |
 | App desktop nativa macOS | **già implementato** — `launcher.py` + `create_app.sh`; progetto in `~/RaxeusAI/` |
+| App desktop nativa Windows | **già implementato** — `launcher.py` + `create_app.ps1` (PyInstaller) |
+| Anti-loop sull'agente | **già implementato** — `loop_guard.py` (idea da OpenJarvis) |
+| Hardware detect + auto modello | **già implementato** — `hardware.py` + comando `hardware` (idea da OpenJarvis) |
+| Diagnostica del sistema | **già implementato** — `doctor.py` + comando `doctor` (idea da OpenJarvis) |

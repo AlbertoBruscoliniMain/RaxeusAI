@@ -16,8 +16,8 @@ echo "[1/3] Generazione icona..."
 ICONSET_DIR="$PROJECT_DIR/AppIcon.iconset"
 SQUARE_TMP="$PROJECT_DIR/_logo_square_tmp.png"
 
-# Crop quadrato centrato (logo 1928x1138 → 1138x1138)
-sips --cropOffset 0 395 --cropToHeightWidth 1138 1138 "$LOGO" --out "$SQUARE_TMP" > /dev/null 2>&1
+# Crop quadrato centrato (logo 1004x1027 → 1004x1004)
+sips --cropOffset 0 11 --cropToHeightWidth 1004 1004 "$LOGO" --out "$SQUARE_TMP" > /dev/null 2>&1
 
 mkdir -p "$ICONSET_DIR"
 for SIZE in 16 32 64 128 256 512; do
