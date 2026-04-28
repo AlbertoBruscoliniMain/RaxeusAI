@@ -1,17 +1,19 @@
-<p align="center">
-  <img src="static/logo.png" alt="Raxeus" height="160">
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="static/logo_lyric.png" alt="RaxeusLyric" height="160">
-</p>
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="static/logo.png" alt="Raxeus" height="180">
+    </td>
+    <td width="40"></td>
+    <td align="center">
+      <img src="static/logo_lyric.png" alt="RaxeusLyric" height="180">
+    </td>
+  </tr>
+</table>
 
 <h1 align="center">RaxeusAI</h1>
 
 <p align="center">
   Assistente AI personale con memoria, tool use e interfaccia web — completamente offline, costruito su Ollama.
-</p>
-
-<p align="center">
-  <b>Raxeus</b> — chat AI con tool use, memoria e visione &nbsp;|&nbsp; <b>RaxeusLyric</b> — testi musicali sincronizzati in tempo reale
 </p>
 
 ---
@@ -45,7 +47,6 @@ Compatibile con **macOS**, **Windows** e **Linux**.
 - **Titolo chat generato dall'AI** — al termine della prima risposta, il modello genera automaticamente un titolo di 3-4 parole che descrive l'argomento trattato
 - **Hardware detection + comando `doctor`** — al primo avvio scopri qual è il modello giusto per il tuo hardware (idea da OpenJarvis)
 - **App desktop nativa su macOS e Windows** — bundle `.app` o `.exe` con icona, doppio click e parte
-- **RaxeusLyric** — modulo integrato per testi musicali sincronizzati: cerca una canzone, scarica l'audio, trascrive con Whisper e mostra il karaoke in tempo reale
 
 ### Tool disponibili
 
@@ -77,54 +78,21 @@ RaxeusAI/
 ├── rag_index.py            # Indicizzazione documenti in ChromaDB per ricerca RAG
 ├── main.py                 # Entry point interfaccia a riga di comando
 ├── app.py                  # Server Flask: endpoint REST e streaming SSE per la web UI
-├── launcher.py             # Avvia Flask in thread daemon e apre finestra nativa (WKWebView su Mac, Edge WebView2 su Windows)
+├── launcher.py             # Avvia Flask in thread daemon e apre finestra nativa
 ├── create_app.sh           # Script bash: genera il bundle RaxeusAI.app con icona per macOS
-├── create_app.ps1          # Script PowerShell: genera RaxeusAI.exe su Desktop via PyInstaller (Windows)
-├── hardware.py             # Rilevamento CPU/RAM/GPU + raccomandazione modello Ollama (idea da OpenJarvis)
-├── loop_guard.py           # Anti-loop sul tool calling: hash, ping-pong, budget (idea da OpenJarvis)
-├── doctor.py               # Diagnostica del sistema: Python, Ollama, modelli, dipendenze (idea da OpenJarvis)
-├── lyric_song_finder.py    # Identifica la canzone in riproduzione su macOS tramite osascript
-├── lyric_fetcher.py        # Recupera testo e timestamp sincronizzati da API esterne (Genius/LRC)
-├── lyric_downloader.py     # Scarica il file audio della canzone corrente per la trascrizione
-├── lyric_transcriber.py    # Trascrive l'audio con Whisper e genera i timestamp parola per parola
-├── lyric_formatter.py      # Formatta e allinea i testi per la visualizzazione sincronizzata
+├── create_app.ps1          # Script PowerShell: genera RaxeusAI.exe su Desktop (Windows)
+├── hardware.py             # Rilevamento CPU/RAM/GPU + raccomandazione modello Ollama
+├── loop_guard.py           # Anti-loop sul tool calling: hash, ping-pong, budget
+├── doctor.py               # Diagnostica del sistema: Python, Ollama, modelli, dipendenze
 ├── templates/
-│   ├── index.html          # Markup interfaccia web principale (chat con tab multiple)
-│   └── lyric.html          # Template per la visualizzazione dei testi sincronizzati (RaxeusLyric)
+│   └── index.html          # Markup interfaccia web principale (chat con tab multiple)
 ├── static/
 │   ├── style.css           # Tema scuro e layout responsive
-│   └── app.js              # Logica client: tab, streaming SSE, color picker, ricerca chat
+│   ├── app.js              # Logica client: tab, streaming SSE, color picker, ricerca chat
+│   ├── logo.png            # Logo RaxeusAI
+│   └── logo_lyric.png      # Logo RaxeusLyric
 └── requirements.txt        # Dipendenze Python del progetto
 ```
-
-### Descrizione per file
-
-| File | Cosa fa | A cosa serve |
-|---|---|---|
-| `config.py` | Definisce le costanti globali (modello, URL, nome AI, system prompt, path RAG) | Punto unico di configurazione: cambiare modello o personalità senza toccare altro codice |
-| `memory.py` | Mantiene la lista dei messaggi della sessione corrente | Passa la cronologia completa al modello ad ogni turno, abilitando la memoria multi-turno |
-| `agent.py` | Implementa il loop agente: invia messaggi, riceve risposte in streaming, rileva e esegue tool call, reinvia i risultati | Cuore del sistema: gestisce l'intero ciclo di ragionamento dell'AI |
-| `tools.py` | Definisce le funzioni dei tool (web search, file, Python, PDF, Wikipedia, RAG…) e il loro schema JSON | Permette al modello di agire nel mondo reale chiamando funzioni esterne |
-| `sessions.py` | Salva e carica le conversazioni come file JSON nella cartella `sessions/` | Persistenza delle chat tra sessioni diverse |
-| `rag_index.py` | Legge i file in `rag_docs/`, li divide in chunk e li indicizza in ChromaDB | Costruisce la base di conoscenza locale consultabile dal tool `rag_search` |
-| `main.py` | Loop CLI con comandi `reset`, `salva`, `sessioni`, `carica`, `esci` | Modalità terminale per uso rapido senza browser |
-| `app.py` | Server Flask con endpoint `/chat` (POST) e `/stream` (SSE), gestione sessioni lato server | Backend della web UI: riceve i messaggi e trasmette le risposte token per token |
-| `launcher.py` | Avvia Flask in un thread daemon e apre la web UI in una finestra nativa (WKWebView su Mac, Edge WebView2 su Windows) | Permette di usare RaxeusAI come app desktop senza aprire il browser |
-| `create_app.sh` | Genera `RaxeusAI.app` con icona `.icns` sul Desktop tramite `sips`/`iconutil` | Crea il bundle macOS avviabile con doppio clic |
-| `create_app.ps1` | Genera `RaxeusAI\RaxeusAI.exe` sul Desktop con PyInstaller, icona `.ico` da Pillow | Crea l'eseguibile Windows avviabile con doppio clic |
-| `hardware.py` | Rileva CPU/RAM/GPU e suggerisce il modello Ollama più adatto | Aiuta l'utente a scegliere `MODEL` in base alla macchina; usato da `doctor` |
-| `loop_guard.py` | Blocca pattern degeneri nel tool calling (hash identico, ping-pong, budget per tool) | Evita che l'agente si avviti in cicli inutili — idea adattata da OpenJarvis |
-| `doctor.py` | Diagnostica completa: Python, Ollama, modelli, dipendenze | Comando `doctor` nella CLI; chiarisce subito perché qualcosa non funziona |
-| `lyric_song_finder.py` | Interroga Music.app via osascript per ottenere titolo e artista della traccia corrente | Primo passo del modulo RaxeusLyric: identifica cosa si sta ascoltando |
-| `lyric_fetcher.py` | Chiama API (Genius, LRC lib) per scaricare il testo con timestamp sincronizzati | Recupera i testi karaoke-style allineati alla traccia |
-| `lyric_downloader.py` | Scarica l'audio della canzone corrente in un file temporaneo | Fornisce il file audio a Whisper per la trascrizione locale |
-| `lyric_transcriber.py` | Esegue Whisper sull'audio scaricato e restituisce i segmenti con timestamp | Trascrizione locale come alternativa/verifica ai testi scaricati da API |
-| `lyric_formatter.py` | Allinea e formatta i testi per la visualizzazione progressiva nel browser | Prepara i dati per il template `lyric.html` |
-| `templates/index.html` | Struttura HTML della web UI principale: area chat, barra laterale sessioni, tab | Scheletro della pagina, collegato a `app.js` e `style.css` |
-| `templates/lyric.html` | Pagina per la visualizzazione dei testi sincronizzati in tempo reale | Interfaccia del modulo RaxeusLyric |
-| `static/style.css` | Definisce tema scuro, layout flex, stile bolle e animazioni | Aspetto visivo dell'intera applicazione web |
-| `static/app.js` | Gestisce tab, invio messaggi, ricezione SSE, color picker, ricerca chat, localStorage | Tutta la logica interattiva del browser |
-| `requirements.txt` | Lista le dipendenze Python con versioni | Permette di ricreare l'ambiente con `pip install -r requirements.txt` |
 
 ---
 
@@ -132,11 +100,11 @@ RaxeusAI/
 
 - Python 3.10+
 - [Ollama](https://ollama.com) installato e in esecuzione
-- Modello testo (default: `qwen3:8b`) e modello vision (default: `llava`) scaricati localmente
+- Modello testo (default: `qwen3:8b`) e modello vision (default: `qwen2.5vl:7b`) scaricati localmente
 
 ```bash
 ollama pull qwen3:8b
-ollama pull llava
+ollama pull qwen2.5vl:7b
 ```
 
 ---
@@ -220,7 +188,7 @@ Tutte le impostazioni principali si trovano in `config.py`:
 
 ```python
 MODEL = "qwen3:8b"                        # Modello Ollama per il testo
-VISION_MODEL = "llava"                    # Modello Ollama per le immagini
+VISION_MODEL = "qwen2.5vl:7b"            # Modello Ollama per le immagini
 OLLAMA_URL = "http://localhost:11434/v1"  # Endpoint API
 AI_NAME = "Raxeus"                        # Nome dell'assistente
 SYSTEM_PROMPT = "..."                     # Personalità e istruzioni base
@@ -254,7 +222,14 @@ powershell -ExecutionPolicy Bypass -File .\create_app.ps1
 |---|---|
 | [docs/THEORY.md](docs/THEORY.md) | Concetti teorici: LLM, streaming, SSE, tool calling, LoopGuard, architettura |
 | [docs/CODE.md](docs/CODE.md) | Documentazione tecnica di ogni file e dei flussi principali |
-| [docs/RAXEUS_LYRIC.md](docs/RAXEUS_LYRIC.md) | Come funziona il modulo RaxeusLyric: pipeline, codice, integrazione con l'app principale |
 | [docs/WEB-UI.md](docs/WEB-UI.md) | Come funziona l'interfaccia web |
 | [docs/BUGS.md](docs/BUGS.md) | Bug noti e fix applicati |
-| [docs/JARVIS_INSPIRATION.md](docs/JARVIS_INSPIRATION.md) | Cosa è stato preso da [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) e cosa no, file per file |
+| [docs/JARVIS_INSPIRATION.md](docs/JARVIS_INSPIRATION.md) | Cosa è stato preso da [OpenJarvis](https://github.com/open-jarvis/OpenJarvis) e cosa no |
+
+---
+
+## RaxeusLyric
+
+RaxeusAI include il modulo integrato **RaxeusLyric** (`/lyric`): cerca una canzone, scarica l'audio da YouTube, recupera il testo ufficiale e lo mostra sincronizzato con la musica in tempo reale — accessibile direttamente dalla chat tramite il bottone in topbar.
+
+→ Documentazione completa: [docs/RAXEUS_LYRIC.md](docs/RAXEUS_LYRIC.md)
