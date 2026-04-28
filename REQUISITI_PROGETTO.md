@@ -10,7 +10,7 @@
 Questo documento:
 - descrive il prodotto realizzato dallo studente Alberto Bruscolini;
 - raccoglie i requisiti funzionali e non funzionali;
-- presenta i diagrammi ER, UML e casi d'uso organizzati nelle fasi di analisi, sviluppo e rifinitura;
+- presenta i diagrammi e i casi d'uso organizzati nelle fasi di analisi, sviluppo e rifinitura;
 - definisce la roadmap di lavoro con milestone e Gantt.
 
 ### 1.2 Contesto
@@ -19,11 +19,11 @@ RaxeusAI è un'applicazione web completa con backend in Python/Flask, interfacci
 
 La persistenza non utilizza un database relazionale: le conversazioni sono salvate come file JSON nella cartella `sessions/`, scelta adeguata alla natura single-user dell'applicazione.
 
-### 1.3 Tema
+### 1.3 Tema d'esempio
 
 **RaxeusAI** è un assistente AI personale che gira localmente tramite Ollama. Risponde in streaming token per token, esegue tool reali in autonomia e dispone di un'interfaccia web con tab multiple e personalizzazione grafica. Include il modulo **RaxeusLyric** per la visualizzazione sincronizzata dei testi delle canzoni in riproduzione, ed è disponibile come app desktop nativa su macOS tramite pywebview.
 
-## 2. Obiettivi
+## 2. Obiettivi generali
 
 - Permettere all'utente di conversare con un LLM locale in tempo reale.
 - Rispondere in streaming token per token.
@@ -42,7 +42,9 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 | Docente | Valutatore | Verificare correttezza tecnica e completezza |
 | Utente finale | Utente singolo locale | Usare l'assistente per domande, ricerche e automazioni |
 
-**Attore principale:** `Utente locale` — l'applicazione è single-user e non prevede autenticazione.
+### Attori principali
+
+**Utente locale** — l'unico attore del sistema. L'applicazione è single-user e non prevede autenticazione.
 
 ## 4. Requisiti funzionali
 
@@ -81,145 +83,9 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 - Le sessioni sono persistenti tra un avvio e l'altro.
 - Il codice è organizzato in moduli separati con responsabilità chiare.
 
-## 6. Glossario
+## 6. Casi d'uso
 
-- `LLM`: Large Language Model — modello di linguaggio che genera testo.
-- `Ollama`: strumento per eseguire LLM localmente sul proprio computer.
-- `Tool calling`: capacità del modello di richiamare funzioni esterne durante la generazione della risposta.
-- `Streaming`: tecnica che invia la risposta token per token man mano che viene generata.
-- `SSE` (Server-Sent Events): protocollo HTTP per aggiornamenti in tempo reale dal server al browser.
-- `Sessione`: conversazione singola identificata da UUID, salvata come file JSON.
-- `Memoria conversazionale`: cronologia dei messaggi della sessione corrente, passata al modello a ogni turno.
-- `RAG` (Retrieval-Augmented Generation): ricerca su documenti locali indicizzati in ChromaDB, utilizzata come tool dall'agente.
-- `Tab`: scheda nella web UI che rappresenta una sessione di chat aperta.
-
-## 7. Modello dei dati
-
-La persistenza è gestita tramite file JSON nella cartella `sessions/`. Lo schema ER seguente rappresenta le entità e le relazioni in forma concettuale.
-
-### 7.1 Schema ER concettuale
-
-```mermaid
-erDiagram
-    SESSIONE {
-        string session_id PK
-        string titolo
-        datetime data_creazione
-    }
-    MESSAGGIO {
-        int indice PK
-        string session_id FK
-        string role
-        string content
-    }
-    TOOL_CALL {
-        string id PK
-        int messaggio_indice FK
-        string nome_tool
-        string arguments
-    }
-    TOOL_RESULT {
-        string tool_call_id FK
-        string content
-    }
-    PREFERENZA_BOLLA {
-        string session_id FK
-        string bg_color
-        string text_color
-    }
-
-    SESSIONE ||--o{ MESSAGGIO : contiene
-    MESSAGGIO ||--o{ TOOL_CALL : genera
-    TOOL_CALL ||--o| TOOL_RESULT : produce
-    SESSIONE ||--o| PREFERENZA_BOLLA : ha
-```
-
-### 7.2 Struttura di una sessione (file JSON)
-
-```json
-{
-  "session_id": "uuid-v4",
-  "messages": [
-    { "role": "user", "content": "Testo del messaggio" },
-    { "role": "assistant", "content": "Risposta dell'AI" },
-    {
-      "role": "assistant",
-      "content": "",
-      "tool_calls": [
-        {
-          "id": "tool-id",
-          "type": "function",
-          "function": { "name": "google_search", "arguments": "{\"query\": \"...\"}" }
-        }
-      ]
-    },
-    { "role": "tool", "tool_call_id": "tool-id", "name": "google_search", "content": "risultato" }
-  ]
-}
-```
-
-### 7.3 Dati nel browser (localStorage)
-
-| Chiave | Valore |
-| --- | --- |
-| `chat_<session_id>` | Array JSON dei messaggi della chat |
-| `bubble_color_<session_id>` | Oggetto JSON `{ bg, text }` con il colore della bolla |
-
-## 8. Diagramma UML delle classi
-
-```mermaid
-classDiagram
-    class Memory {
-        -list messages
-        +add(role, content)
-        +add_assistant_tool_calls(content, tool_calls)
-        +add_tool_result(tool_call_id, name, result)
-        +get() list
-        +load(messages)
-        +reset()
-    }
-    class Agent {
-        +chat(user_input) str
-        +chat_stream(user_input, mem) Generator
-        +reset()
-    }
-    class Tools {
-        +google_search(query) str
-        +web_search(query) str
-        +fetch_url(url) str
-        +read_file(path) str
-        +write_file(path, content) str
-        +append_file(path, content) str
-        +run_python(code) str
-        +read_pdf(path) str
-        +wikipedia_search(query, lang) str
-        +rag_search(query) str
-        +list_dir(path) str
-        +get_datetime() str
-        +execute_tool(name, args) str
-    }
-    class Sessions {
-        +save_session(messages)
-        +load_session(session_id) list
-        +list_sessions() list
-    }
-    class FlaskApp {
-        +index() Response
-        +chat() Response
-        +get_sessions() Response
-        +delete_session(session_id) Response
-    }
-
-    FlaskApp --> Memory : crea una per sessione
-    FlaskApp --> Agent : chiama chat_stream
-    Agent --> Memory : legge e scrive
-    Agent --> Tools : esegue tool
-    FlaskApp --> Sessions : salva e carica
-```
-
-## 9. Casi d'uso
-
-### 9.1 Casi d'uso principali
+### 6.1 Casi d'uso essenziali
 
 1. `Invia messaggio`
 2. `Ricevi risposta in streaming`
@@ -231,7 +97,7 @@ classDiagram
 8. `Personalizza colore bolla`
 9. `Carica sessione passata`
 
-### 9.2 Descrizione dei casi d'uso
+### 6.2 Descrizione semplificata dei casi d'uso
 
 - **Invia messaggio**: l'utente digita un testo e preme Invio; il frontend invia la richiesta via POST a `/chat` con testo e ID sessione.
 - **Ricevi risposta in streaming**: il backend apre una connessione SSE e invia token per token; il frontend aggiorna la bolla in tempo reale.
@@ -241,12 +107,12 @@ classDiagram
 - **Personalizza colore bolla**: l'utente clicca il pallino colorato, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
 - **Carica sessione passata**: l'utente seleziona una sessione salvata dalla lista; la cronologia viene ripristinata nella tab corrente.
 
-### 9.3 Relazioni tra casi d'uso: include ed extend
+### 6.3 Relazioni tra casi d'uso: include ed extend
 
 - `<<include>>`: comportamento obbligatorio sempre eseguito all'interno del caso d'uso base.
 - `<<extend>>`: comportamento opzionale che si aggiunge al caso d'uso base solo in certe condizioni.
 
-Relazioni principali:
+Relazioni include:
 
 - `Invia messaggio` <<include>> `Ricevi risposta in streaming`: ogni messaggio produce sempre una risposta in streaming.
 - `Ricevi risposta in streaming` <<include>> `Esecuzione automatica tool`: il tool calling è parte integrante del ciclo di risposta ogni volta che il modello lo attiva.
@@ -256,7 +122,7 @@ Relazioni extend:
 - `Carica sessione passata` <<extend>> `Apri nuova chat`: l'utente può aprire una chat preesistente invece di crearne una nuova.
 - `Personalizza colore bolla` <<extend>> `Apri nuova chat`: la personalizzazione del colore è opzionale e disponibile dopo aver aperto una chat.
 
-### 9.4 Diagramma dei casi d'uso
+### 6.4 Diagramma dei casi d'uso
 
 ```plantuml
 @startuml uc
@@ -279,7 +145,19 @@ Utente --> (Carica sessione passata)
 @enduml
 ```
 
-## 10. Pianificazione e milestone
+## 7. Glossario dei termini
+
+- `LLM`: Large Language Model — modello di linguaggio che genera testo.
+- `Ollama`: strumento per eseguire LLM localmente sul proprio computer.
+- `Tool calling`: capacità del modello di richiamare funzioni esterne durante la generazione della risposta.
+- `Streaming`: tecnica che invia la risposta token per token man mano che viene generata.
+- `SSE` (Server-Sent Events): protocollo HTTP per aggiornamenti in tempo reale dal server al browser.
+- `Sessione`: conversazione singola identificata da UUID, salvata come file JSON.
+- `Memoria conversazionale`: cronologia dei messaggi della sessione corrente, passata al modello a ogni turno.
+- `RAG` (Retrieval-Augmented Generation): ricerca su documenti locali indicizzati in ChromaDB, utilizzata come tool dall'agente.
+- `Tab`: scheda nella web UI che rappresenta una sessione di chat aperta.
+
+## 8. Pianificazione e milestone
 
 | Settimana | Attività |
 | --- | --- |
@@ -292,7 +170,7 @@ Utente --> (Carica sessione passata)
 
 **Consegna prevista: 31 maggio 2026.**
 
-### 10.1 Gantt
+### 8.1 Gantt semplificato
 
 ```mermaid
 gantt
