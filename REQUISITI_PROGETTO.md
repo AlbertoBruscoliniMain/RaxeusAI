@@ -1,8 +1,4 @@
 # Documento dei Requisiti — RaxeusAI
-
-**🔗 Link GitHub al documento:** [https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md](https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md)
-
-> Progetto di fine anno per il modulo `03_Sviluppo_Web_e_Database`.
 > **RaxeusAI** è un assistente AI personale con interfaccia web, sviluppato in Python/Flask con integrazione a un modello linguistico locale tramite Ollama.
 
 ## 1. Introduzione
