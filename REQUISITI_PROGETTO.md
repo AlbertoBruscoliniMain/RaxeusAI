@@ -1,5 +1,7 @@
 # Documento dei Requisiti — RaxeusAI
 
+**🔗 Link GitHub al documento:** [https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md](https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md)
+
 > Progetto di fine anno per il modulo `03_Sviluppo_Web_e_Database`.
 > **RaxeusAI** è un assistente AI personale con interfaccia web, sviluppato in Python/Flask con integrazione a un modello linguistico locale tramite Ollama.
 
@@ -21,7 +23,7 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 
 ### 1.3 Tema d'esempio
 
-**RaxeusAI** è un assistente AI personale che gira localmente tramite Ollama. Risponde in streaming token per token, esegue tool reali in autonomia (anche più tool in parallelo nello stesso turno) e dispone di un'interfaccia web con tab multiple e personalizzazione grafica. Include il modulo **RaxeusLyric** per la visualizzazione sincronizzata dei testi delle canzoni, è disponibile come app desktop nativa sia su **macOS** (bundle `.app` via `create_app.sh`) sia su **Windows** (bundle `.exe` via `create_app.ps1` + PyInstaller), ed è dotato di sistemi di robustezza ispirati al framework [OpenJarvis](https://github.com/open-jarvis/OpenJarvis): LoopGuard contro le chiamate ripetute, compressione automatica del context, hardware detection con raccomandazione del modello e comando `doctor` per la diagnostica.
+**RaxeusAI** è un assistente AI personale che gira localmente tramite Ollama. Risponde in streaming token per token, esegue tool reali in autonomia (anche più tool in parallelo nello stesso turno) e dispone di un'interfaccia web con tab multiple, personalizzazione grafica, rendering formule matematiche tramite **KaTeX** e generazione automatica del titolo della chat tramite AI. Include il modulo **RaxeusLyric** per la visualizzazione sincronizzata dei testi delle canzoni, è disponibile come app desktop nativa sia su **macOS** (bundle `.app` via `create_app.sh`) sia su **Windows** (bundle `.exe` via `create_app.ps1` + PyInstaller), ed è dotato di sistemi di robustezza ispirati al framework [OpenJarvis](https://github.com/open-jarvis/OpenJarvis): LoopGuard contro le chiamate ripetute, compressione automatica del context, hardware detection con raccomandazione del modello e comando `doctor` per la diagnostica.
 
 ## 2. Obiettivi generali
 
@@ -63,13 +65,15 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 8. Persistenza su file JSON: le sessioni sono salvate in `sessions/` e ricaricate automaticamente all'avvio.
 9. Interfaccia web con tab multiple, barra di ricerca e color picker per le bolle utente.
 10. Rendering del markdown nelle risposte (titoli, codice, tabelle, grassetto).
-11. Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `doctor`, `hardware`, `esci`.
-12. Caricamento di fino a 3 immagini per messaggio; il modello vision le analizza e risponde anche in assenza di testo.
-13. Modulo RaxeusLyric: identificazione della canzone richiesta, recupero e visualizzazione del testo sincronizzato.
-14. App desktop nativa su macOS tramite pywebview (`launcher.py` + `create_app.sh` → bundle `.app`).
-15. App desktop nativa su Windows tramite pywebview + PyInstaller (`launcher.py` + `create_app.ps1` → eseguibile `.exe`).
-16. Rilevamento hardware (CPU, RAM, GPU) e raccomandazione automatica del modello Qwen3 più adatto.
-17. Comando `doctor` per la diagnostica completa: versione Python, raggiungibilità Ollama, presenza dei modelli, presenza delle dipendenze.
+11. Rendering delle formule matematiche LaTeX nelle risposte tramite **KaTeX** (delimitatori `$...$` inline e `$$...$$` display), applicato sia durante lo streaming che al caricamento dei messaggi dalla cache.
+12. Generazione automatica del titolo della chat: al termine della prima risposta, il modello produce un titolo di 3-4 parole che descrive l'argomento trattato, aggiornando la tab senza bloccare il flusso.
+13. Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `doctor`, `hardware`, `esci`.
+14. Caricamento di fino a 3 immagini per messaggio; il modello vision le analizza e risponde anche in assenza di testo.
+15. Modulo RaxeusLyric: ricerca canzone (iTunes API), recupero testo (lyrics.ovh), download audio (yt-dlp + FFmpeg), trascrizione (faster-Whisper), forced alignment testo-audio con programmazione dinamica e visualizzazione karaoke sincronizzata in tempo reale.
+16. App desktop nativa su macOS tramite pywebview (`launcher.py` + `create_app.sh` → bundle `.app`).
+17. App desktop nativa su Windows tramite pywebview + PyInstaller (`launcher.py` + `create_app.ps1` → eseguibile `.exe`).
+18. Rilevamento hardware (CPU, RAM, GPU) e raccomandazione automatica del modello Qwen3 più adatto.
+19. Comando `doctor` per la diagnostica completa: versione Python, raggiungibilità Ollama, presenza dei modelli, presenza delle dipendenze.
 
 ### 4.2 User stories
 
@@ -80,6 +84,8 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 - L'utente personalizza il colore delle bolle dei messaggi per ogni chat.
 - Le conversazioni vengono salvate automaticamente e ricaricate al prossimo avvio.
 - L'utente allega fino a 3 immagini a un messaggio; l'assistente ne analizza il contenuto e risponde anche senza testo di accompagnamento.
+- L'utente riceve risposte con formule matematiche renderizzate graficamente invece dei simboli LaTeX grezzi.
+- Il titolo della tab si aggiorna automaticamente con l'argomento della chat senza che l'utente debba inserirlo manualmente.
 - L'utente visualizza i testi della canzone in riproduzione sincronizzati in tempo reale.
 
 ## 5. Requisiti non funzionali
@@ -109,8 +115,10 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 8. `Personalizza colore bolla`
 9. `Carica sessione passata`
 10. `Allega immagini al messaggio`
-11. `Diagnostica del sistema (doctor)`
-12. `Rilevamento hardware e raccomandazione modello`
+11. `Visualizza formula matematica`
+12. `Generazione automatica titolo chat`
+13. `Diagnostica del sistema (doctor)`
+14. `Rilevamento hardware e raccomandazione modello`
 
 ### 6.2 Descrizione semplificata dei casi d'uso
 
@@ -122,6 +130,8 @@ La persistenza non utilizza un database relazionale: le conversazioni sono salva
 - **Personalizza colore bolla**: l'utente clicca il pallino colorato, sceglie un preset o un colore custom; il colore viene salvato in localStorage per la sessione attiva.
 - **Carica sessione passata**: l'utente seleziona una sessione salvata dalla lista; la cronologia viene ripristinata nella tab corrente.
 - **Allega immagini al messaggio**: l'utente seleziona fino a 3 immagini dal pulsante di upload; le anteprime appaiono accanto alla casella di testo e, all'invio, il modello vision (llava) le analizza e risponde anche in assenza di testo.
+- **Visualizza formula matematica**: le risposte dell'assistente che contengono espressioni LaTeX (es. `$E=mc^2$`) vengono renderizzate graficamente da KaTeX nel browser; il rendering avviene sia durante lo streaming che al ricaricamento dei messaggi dalla cache locale.
+- **Generazione automatica titolo chat**: al termine della prima risposta dell'assistente, il frontend chiama `/title` in background; il backend invoca `generate_title()` che chiede al modello un titolo di 3-4 parole sull'argomento trattato e aggiorna il titolo della tab senza interrompere il flusso.
 - **Diagnostica del sistema (doctor)**: l'utente esegue `python main.py doctor`; il sistema verifica versione Python, raggiungibilità di Ollama, presenza dei modelli configurati e delle dipendenze, restituendo un report a checklist con `✓` / `!` / `✗`.
 - **Rilevamento hardware e raccomandazione modello**: l'utente esegue `python main.py hardware`; il sistema rileva CPU, RAM e GPU, e suggerisce il modello Qwen3 (1.7B / 4B / 8B / 14B / 32B) più adatto alle risorse disponibili.
 
@@ -154,12 +164,16 @@ Utente --> (Chiudi tab)
 Utente --> (Cerca tra le chat)
 Utente --> (Personalizza colore bolla)
 Utente --> (Carica sessione passata)
+Utente --> (Allega immagini al messaggio)
 
 (Invia messaggio) .> (Ricevi risposta in streaming) : <<include>>
 (Ricevi risposta in streaming) .> (Esecuzione automatica tool) : <<include>>
+(Ricevi risposta in streaming) .> (Visualizza formula matematica) : <<extend>>
+(Ricevi risposta in streaming) .> (Generazione automatica titolo chat) : <<extend>>
 
 (Carica sessione passata) .> (Apri nuova chat) : <<extend>>
 (Personalizza colore bolla) .> (Apri nuova chat) : <<extend>>
+(Allega immagini al messaggio) .> (Invia messaggio) : <<extend>>
 @enduml
 ```
 
@@ -180,6 +194,11 @@ Utente --> (Carica sessione passata)
 - `PyInstaller`: tool che impacchetta l'applicazione Python in un eseguibile standalone; usato su Windows per generare il file `.exe` di RaxeusAI.
 - `Vision model`: modello multimodale (`llava`) capace di analizzare immagini in input oltre al testo.
 - `Hardware tier`: classificazione della macchina in base a RAM e GPU, usata per suggerire il modello Qwen3 più adatto.
+- `KaTeX`: libreria JavaScript open-source per il rendering di formule matematiche in LaTeX nel browser, usata al posto di MathJax per la sua velocità.
+- `LRC`: formato testuale standard per i testi musicali sincronizzati; ogni riga è preceduta da un timestamp `[mm:ss.xx]`.
+- `Whisper` / `faster-whisper`: modello di riconoscimento vocale di OpenAI (addestrato su 680.000 ore di audio); faster-whisper è la reimplementazione ottimizzata con CTranslate2, usata da RaxeusLyric per la trascrizione con timestamp per parola.
+- `yt-dlp`: strumento per il download di audio/video da YouTube e altre piattaforme; usato da RaxeusLyric per scaricare la traccia audio della canzone cercata.
+- `Forced alignment`: algoritmo di programmazione dinamica che allinea le parole del testo ufficiale di una canzone con le parole trascritte da Whisper (che portano i timestamp), producendo un timestamp preciso per ogni riga del testo.
 
 ## 8. Pianificazione e milestone
 
