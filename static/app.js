@@ -31,6 +31,9 @@ const customColor     = document.getElementById('custom-color');
 const btnInfo         = document.getElementById('btn-info');
 const infoOverlay     = document.getElementById('info-overlay');
 const infoClose       = document.getElementById('info-close');
+const btnAgentHelp    = document.getElementById('btn-agent-help');
+const agentInfoOverlay= document.getElementById('agent-info-overlay');
+const agentInfoClose  = document.getElementById('agent-info-close');
 const imgInput        = document.getElementById('img-input');
 const imgPreviewStrip = document.getElementById('img-preview-strip');
 
@@ -402,6 +405,59 @@ infoClose.addEventListener('click', () => infoOverlay.classList.add('hidden'));
 infoOverlay.addEventListener('click', e => {
   if (e.target === infoOverlay) infoOverlay.classList.add('hidden');
 });
+
+if (btnAgentHelp) {
+  btnAgentHelp.addEventListener('click', () => agentInfoOverlay.classList.add('visible'));
+  agentInfoClose.addEventListener('click', () => agentInfoOverlay.classList.remove('visible'));
+  agentInfoOverlay.addEventListener('click', e => {
+    if (e.target === agentInfoOverlay) agentInfoOverlay.classList.remove('visible');
+  });
+
+  // Markdown detail viewer
+  const featureCards = document.querySelectorAll('.agent-feature-card');
+  const detailOverlay = document.getElementById('feature-detail-overlay');
+  const detailClose = document.getElementById('feature-detail-close');
+  const detailContent = document.getElementById('feature-detail-content');
+
+  if (detailOverlay) {
+    featureCards.forEach(card => {
+      card.addEventListener('click', async () => {
+        const featureId = card.dataset.feature;
+        if (!featureId) return;
+
+        detailContent.innerHTML = '<div style="text-align:center; padding: 40px; color: #888;">Caricamento...</div>';
+        detailOverlay.classList.add('visible');
+
+        try {
+          const res = await fetch(`/static/docs/${featureId}.md`);
+          if (!res.ok) throw new Error('Non trovato');
+          const text = await res.text();
+          
+          detailContent.innerHTML = marked.parse(text);
+          
+          if (typeof mermaid !== 'undefined') {
+            const mermaidBlocks = detailContent.querySelectorAll('code.language-mermaid');
+            mermaidBlocks.forEach((block, idx) => {
+              const div = document.createElement('div');
+              div.className = 'mermaid';
+              div.textContent = block.textContent;
+              block.parentNode.replaceWith(div);
+            });
+            mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+          }
+
+        } catch (e) {
+          detailContent.innerHTML = `<div style="color: #ef4444; padding: 40px; text-align: center;">Errore: Impossibile caricare i dettagli.</div>`;
+        }
+      });
+    });
+
+    detailClose.addEventListener('click', () => detailOverlay.classList.remove('visible'));
+    detailOverlay.addEventListener('click', e => {
+      if (e.target === detailOverlay) detailOverlay.classList.remove('visible');
+    });
+  }
+}
 btnSend.addEventListener('click', sendMessage);
 
 msgInput.addEventListener('keydown', e => {

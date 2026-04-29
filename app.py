@@ -11,7 +11,7 @@ from agent import chat_stream, generate_title
 from sessions import save_session, list_sessions, load_session
 from lyric_downloader import download_audio
 from lyric_transcriber import get_transcription
-from lyric_formatter import save_as_lrc, update_playlist, check_cache_with_entry, get_playlist_entry, safe_title
+from lyric_formatter import save_as_lrc, update_playlist, check_cache, check_cache_with_entry, get_playlist_entry, safe_title
 from lyric_fetcher import fetch_lyrics
 from lyric_song_finder import find_song
 
@@ -288,7 +288,11 @@ def lyric_load():
     if not segments:
         return jsonify({"error": "Non trovato"}), 404
     entry = get_playlist_entry(title)
-    return jsonify({"segments": segments, "audio": entry.get("audio") if entry else None})
+    return jsonify({
+        "segments": segments, 
+        "audio": entry.get("audio") if entry else None,
+        "cover": entry.get("cover") if entry else None
+    })
 
 
 @app.route("/lyric/api/delete", methods=["POST"])

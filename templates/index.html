@@ -13,6 +13,7 @@
   <div id="topbar">
     <img id="logo" src="/static/logo.png" alt="Raxeus">
     <button id="btn-info" title="Info">ⓘ</button>
+    <button id="btn-agent-help" title="Cosa so fare?">?</button>
 
     <div id="search-wrap">
       <input id="search" type="text" placeholder="cerca...">
@@ -53,11 +54,95 @@
     </div>
   </div>
 
+  <div id="agent-info-overlay">
+    <div id="agent-info-modal">
+      <button id="agent-info-close">✕</button>
+      <div class="agent-modal-header">
+        <img src="/static/logo.png" alt="Raxeus">
+        <div class="agent-modal-title">
+          <h2>Raxeus AI</h2>
+          <p>Il tuo assistente personale avanzato. Ecco cosa posso fare per te:</p>
+        </div>
+      </div>
+      <div class="agent-modal-sections">
+        <div class="agent-modal-section">
+          <h3 class="section-badge">⚡ Core AI</h3>
+          <div class="agent-feature-grid">
+            <div class="agent-feature-card" data-feature="web_search">
+              <div class="card-icon web">🌐</div>
+              <div class="card-content">
+                <h4>Ricerca Web</h4>
+                <p>Esploro Google e il Web in tempo reale per darti risposte iper-aggiornate.</p>
+              </div>
+            </div>
+            <div class="agent-feature-card" data-feature="python_code">
+              <div class="card-icon code">💻</div>
+              <div class="card-content">
+                <h4>Esecuzione Python</h4>
+                <p>Scrivo e lancio script all'istante per calcoli complessi e automazioni.</p>
+              </div>
+            </div>
+            <div class="agent-feature-card" data-feature="rag_memory">
+              <div class="card-icon rag">🧠</div>
+              <div class="card-content">
+                <h4>Memoria RAG</h4>
+                <p>Interrogo in modo intelligente i tuoi PDF, documenti e appunti personali.</p>
+              </div>
+            </div>
+            <div class="agent-feature-card" data-feature="file_management">
+              <div class="card-icon file">📂</div>
+              <div class="card-content">
+                <h4>Gestione File</h4>
+                <p>Leggo, scrivo e organizzo cartelle direttamente nel tuo computer locale.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="agent-modal-section">
+          <h3 class="section-badge lyric">🎵 RaxeusLyric</h3>
+          <div class="agent-feature-grid">
+            <div class="agent-feature-card lyric" data-feature="audio_download">
+              <div class="card-icon audio">🎧</div>
+              <div class="card-content">
+                <h4>Download Audio AI</h4>
+                <p>Cerca qualsiasi canzone, ne estrae l'audio e scarica la copertina in alta qualità.</p>
+              </div>
+            </div>
+            <div class="agent-feature-card lyric" data-feature="magic_transcription">
+              <div class="card-icon mic">🎤</div>
+              <div class="card-content">
+                <h4>Trascrizione Magica</h4>
+                <p>Usa l'Intelligenza Artificiale per ascoltare il brano e trascriverne il testo esatto.</p>
+              </div>
+            </div>
+            <div class="agent-feature-card lyric" data-feature="karaoke_sync">
+              <div class="card-icon sync">⏱️</div>
+              <div class="card-content">
+                <h4>Sincronizzazione (Karaoke)</h4>
+                <p>Genera testi sincronizzati al millisecondo per farti cantare seguendo la musica a schermo.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="feature-detail-overlay">
+    <div id="feature-detail-modal">
+      <button id="feature-detail-close">✕</button>
+      <div id="feature-detail-content"></div>
+    </div>
+  </div>
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
     onload="window._katexReady = true"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad: false, theme: 'dark'});</script>
   <script src="/static/app.js"></script>
 </body>
 </html>
