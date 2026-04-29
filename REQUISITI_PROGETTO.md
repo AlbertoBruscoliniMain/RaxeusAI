@@ -289,21 +289,17 @@ graph LR
 
 > Sviluppatore singolo — una attività alla volta. Avvio: **8 aprile 2026**. Consegna: **1 giugno 2026**.
 
-| Fase | Date | Attività | Stato |
+| Settimana | Date | Attività | Stato |
 | --- | --- | --- | --- |
-| 1 | 8–10 apr | Analisi requisiti, casi d'uso, struttura moduli | ✅ Completata |
-| 2 | 11–13 apr | Setup venv, Flask, Ollama, struttura del progetto | ✅ Completata |
-| 3 | 14–18 apr | Backend core: `memory.py`, `agent.py`, loop con streaming | ✅ Completata |
-| 4 | 19–22 apr | Tool calling base: web search, file, Python, datetime | ✅ Completata |
-| 5 | 23–25 apr | Tool avanzati: PDF, Wikipedia, RAG (ChromaDB) | ✅ Completata |
-| 6 | 25–27 apr | Web UI: HTML, CSS, template Flask, streaming SSE | ✅ Completata |
-| 7 | 27–29 apr | Tab multiple, sessioni, color picker, immagini, KaTeX, titolo smart | ✅ Completata |
-| 8 | 28–29 apr | RaxeusLyric: pipeline completa, player, forced alignment | ✅ Completata |
-| 9 | 29 apr | App desktop macOS/Windows, nuovi loghi, AppIcon | ✅ Completata |
-| 10 | 30 apr–14 mag | **Testing** — verifica ogni funzionalità, casi limite, regressioni | 🔄 In corso |
-| 11 | 15–23 mag | Bug fix, ottimizzazioni, pulizia codice | ⏳ Pianificata |
-| 12 | 24–28 mag | Documentazione finale, revisione REQUISITI_PROGETTO.md | ⏳ Pianificata |
-| 13 | 29 mag–1 giu | Revisione generale, push finale, consegna | ⏳ Pianificata |
+| 1 | 8–11 apr | Analisi requisiti e setup ambiente | ✅ |
+| 2 | 14–18 apr | Backend core: agent loop e streaming | ✅ |
+| 3 | 21–25 apr | Tool calling e Web UI base | ✅ |
+| 4 | 28–29 apr | Funzionalità avanzate: immagini, KaTeX, titolo smart | ✅ |
+| 4 | 28–29 apr | Implementazione funzione AutoLyric + test | ✅ |
+| 4 | 29 apr | App desktop, loghi e documentazione tecnica | ✅ |
+| 5–6 | 30 apr–15 mag | Testing generale e bug fix | 🔄 |
+| 7–8 | 16–29 mag | Ottimizzazioni, documentazione finale | ⏳ |
+| 9 | 30 mag–1 giu | Revisione e consegna | ⏳ |
 
 **Consegna: 1 giugno 2026**
 
@@ -315,37 +311,25 @@ gantt
     title       RaxeusAI — Piano progetto (sviluppatore singolo)
 
     section Analisi e setup
-    Analisi requisiti e casi d'uso      :done,   a1, 2026-04-08, 3d
-    Setup venv, Flask, Ollama           :done,   a2, after a1,   3d
+    Analisi requisiti e setup ambiente  :done,   a1, 2026-04-08, 4d
 
-    section Backend core
-    Memory e agent loop                 :done,   b1, after a2,   5d
-    Streaming SSE                       :done,   b2, after b1,   2d
-    Tool calling base                   :done,   b3, after b2,   4d
+    section Backend
+    Agent loop e streaming SSE          :done,   b1, after a1,   5d
+    Tool calling                        :done,   b2, after b1,   5d
 
-    section Tool avanzati e Web UI
-    Tool avanzati — PDF, Wikipedia, RAG :done,   c1, after b3,   3d
-    Web UI — HTML, CSS, SSE             :done,   c2, after c1,   3d
-    Tab, sessioni, color picker         :done,   c3, after c2,   3d
+    section Web UI
+    Interfaccia web base                :done,   c1, after b2,   5d
+    Funzionalità avanzate               :done,   c2, after c1,   3d
 
-    section Funzionalità avanzate
-    Immagini, KaTeX, titolo smart       :done,   d1, after c3,   3d
+    section AutoLyric
+    Implementazione funzione AutoLyric + test :done, d1, after c2, 2d
 
-    section Modulo RaxeusLyric
-    Download audio — yt-dlp e FFmpeg    :done,   e1, after d1,   2d
-    Trascrizione — faster-Whisper       :done,   e2, after e1,   3d
-    Forced alignment e player           :done,   e3, after e2,   3d
-
-    section App desktop e branding
-    Bundle macOS e Windows              :done,   f1, after e3,   2d
-    Loghi, AppIcon, documentazione      :done,   f2, after f1,   3d
-
-    section Testing e correzioni
-    Testing funzionalità                :active, g1, 2026-04-30, 15d
-    Bug fix e ottimizzazioni            :        g2, after g1,   9d
+    section Rifinitura
+    App desktop, loghi, documentazione  :done,   e1, after d1,   2d
+    Testing e bug fix                   :active, e2, 2026-04-30, 16d
 
     section Consegna
-    Documentazione finale               :        h1, after g2,   5d
-    Revisione e push finale             :        h2, after h1,   4d
+    Ottimizzazioni e doc finale         :        f1, after e2,   14d
+    Revisione e consegna                :        f2, after f1,   4d
     Consegna                            :milestone, 2026-06-01, 0d
 ```
