@@ -204,72 +204,54 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 
 ### 6.4 Diagramma dei casi d'uso
 
-```plantuml
-@startuml
-left to right direction
-skinparam actorStyle awesome
-skinparam usecase {
-  BackgroundColor White
-  BorderColor #333333
-  FontSize 12
-}
-skinparam ArrowColor #333333
+**Attori e use case:**
 
-actor "Utente locale\n(Web UI)" as Utente
+```mermaid
+graph LR
+    U1["👤 Utente locale\n· Web UI ·"]
 
-Utente --> (Invia messaggio)
-Utente --> (Apri nuova chat)
-Utente --> (Cambia tab attiva)
-Utente --> (Chiudi tab)
-Utente --> (Cerca tra le chat)
-Utente --> (Personalizza colore bolla)
-Utente --> (Carica sessione passata)
-Utente --> (Allega immagini\nal messaggio)
-Utente --> (Cerca canzone)
+    U1 --> a(["Invia messaggio"])
+    U1 --> b(["Apri nuova chat"])
+    U1 --> c(["Cambia tab attiva"])
+    U1 --> d(["Chiudi tab"])
+    U1 --> e(["Cerca tra le chat"])
+    U1 --> f(["Personalizza colore bolla"])
+    U1 --> g(["Carica sessione passata"])
+    U1 --> h(["Allega immagini al messaggio"])
+    U1 --> i(["Cerca canzone · RaxeusLyric"])
 
-actor "Utente locale\n(CLI)" as UtenteCLI
+    U2["👤 Utente locale\n· CLI ·"]
 
-UtenteCLI --> (Avvia assistente\nda terminale)
-UtenteCLI --> (Diagnostica del\nsistema - doctor)
-UtenteCLI --> (Rilevamento\nhardware)
-UtenteCLI --> (Salva sessione)
-UtenteCLI --> (Carica sessione\nda terminale)
-
-@enduml
+    U2 --> j(["Avvia assistente da terminale"])
+    U2 --> k(["Diagnostica sistema · doctor"])
+    U2 --> l(["Rilevamento hardware"])
+    U2 --> m(["Salva / Carica sessione"])
 ```
 
-**Diagramma con relazioni include/extend:**
+**Relazioni include / extend:**
 
-```plantuml
-@startuml
-left to right direction
-skinparam actorStyle awesome
-skinparam usecase {
-  BackgroundColor White
-  BorderColor #333333
-  FontSize 11
-}
-skinparam ArrowColor #333333
+```mermaid
+graph LR
+    IM(["Invia messaggio"])
+    RS(["Ricevi risposta in streaming"])
+    ET(["Esecuzione automatica tool"])
+    FM(["Visualizza formula matematica"])
+    GT(["Generazione titolo chat"])
+    AI(["Allega immagini al messaggio"])
+    CC(["Cerca canzone"])
+    VT(["Visualizza testi sincronizzati"])
+    RA(["Riproduci audio"])
+    SP(["Carica sessione passata"])
+    NC(["Apri nuova chat"])
 
-actor "Utente locale" as Utente
-
-Utente --> (Invia messaggio)
-Utente --> (Apri nuova chat)
-Utente --> (Cerca tra le chat)
-Utente --> (Carica sessione passata)
-Utente --> (Allega immagini\nal messaggio)
-Utente --> (Cerca canzone)
-
-(Invia messaggio)              .> (Ricevi risposta\nin streaming)        : <<include>>
-(Ricevi risposta\nin streaming) .> (Esecuzione\nautomatica tool)        : <<include>>
-(Ricevi risposta\nin streaming) .> (Visualizza formula\nmatematica)      : <<extend>>
-(Ricevi risposta\nin streaming) .> (Generazione\ntitolo chat)            : <<extend>>
-(Allega immagini\nal messaggio) .> (Invia messaggio)                     : <<extend>>
-(Carica sessione passata)       .> (Apri nuova chat)                     : <<extend>>
-(Cerca canzone)                 .> (Visualizza testi\nsincronizzati)      : <<include>>
-(Visualizza testi\nsincronizzati) .> (Riproduci audio)                   : <<include>>
-
-@enduml
+    IM      -->|"«include»"| RS
+    RS      -->|"«include»"| ET
+    RS      -. "«extend»" .-> FM
+    RS      -. "«extend»" .-> GT
+    AI      -. "«extend»" .-> IM
+    SP      -. "«extend»" .-> NC
+    CC      -->|"«include»"| VT
+    VT      -->|"«include»"| RA
 ```
 
 ---
