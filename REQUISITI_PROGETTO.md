@@ -287,51 +287,65 @@ graph LR
 
 ## 8. Pianificazione e milestone
 
-| Settimana | Date | Attività |
-| --- | --- | --- |
-| 1 | 14–18 apr | Analisi requisiti, setup ambiente (Ollama, venv, Flask), struttura moduli |
-| 2 | 21–25 apr | Backend: `memory.py`, `agent.py`, loop con streaming, tool calling base |
-| 3 | 28 apr–2 mag | Tool avanzati (RAG, PDF, Wikipedia), web UI (SSE, tab, sessioni), immagini |
-| 4 | 5–9 mag | App desktop (pywebview, create_app.sh/ps1), KaTeX, titolo smart, RaxeusLyric |
-| 5 | 12–16 mag | Nuovi loghi, AppIcon, fix ffmpeg, documentazione tecnica (CODE.md, RAXEUS_LYRIC.md) |
-| 6 | 19–31 mag | Testing, correzione bug, consegna finale su GitHub |
+> Sviluppatore singolo — una attività alla volta. Avvio: **8 aprile 2026**. Consegna: **1 giugno 2026**.
 
-**Consegna prevista: 31 maggio 2026**
+| Fase | Date | Attività | Stato |
+| --- | --- | --- | --- |
+| 1 | 8–10 apr | Analisi requisiti, casi d'uso, struttura moduli | ✅ Completata |
+| 2 | 11–13 apr | Setup venv, Flask, Ollama, struttura del progetto | ✅ Completata |
+| 3 | 14–18 apr | Backend core: `memory.py`, `agent.py`, loop con streaming | ✅ Completata |
+| 4 | 19–22 apr | Tool calling base: web search, file, Python, datetime | ✅ Completata |
+| 5 | 23–25 apr | Tool avanzati: PDF, Wikipedia, RAG (ChromaDB) | ✅ Completata |
+| 6 | 25–27 apr | Web UI: HTML, CSS, template Flask, streaming SSE | ✅ Completata |
+| 7 | 27–29 apr | Tab multiple, sessioni, color picker, immagini, KaTeX, titolo smart | ✅ Completata |
+| 8 | 28–29 apr | RaxeusLyric: pipeline completa, player, forced alignment | ✅ Completata |
+| 9 | 29 apr | App desktop macOS/Windows, nuovi loghi, AppIcon | ✅ Completata |
+| 10 | 30 apr–14 mag | **Testing** — verifica ogni funzionalità, casi limite, regressioni | 🔄 In corso |
+| 11 | 15–23 mag | Bug fix, ottimizzazioni, pulizia codice | ⏳ Pianificata |
+| 12 | 24–28 mag | Documentazione finale, revisione REQUISITI_PROGETTO.md | ⏳ Pianificata |
+| 13 | 29 mag–1 giu | Revisione generale, push finale, consegna | ⏳ Pianificata |
+
+**Consegna: 1 giugno 2026**
 
 ### 8.1 Gantt semplificato
 
 ```mermaid
 gantt
     dateFormat  YYYY-MM-DD
-    title       Piano di progetto RaxeusAI
+    title       RaxeusAI — Piano progetto (sviluppatore singolo)
 
     section Analisi e setup
-    Analisi requisiti e UML   :a1, 2026-04-14, 2d
-    Setup venv e Flask        :a2, after a1,   3d
+    Analisi requisiti e casi d'uso      :done,   a1, 2026-04-08, 3d
+    Setup venv, Flask, Ollama           :done,   a2, after a1,   3d
 
     section Backend core
-    Memory e agent loop       :b1, after a2,   4d
-    Streaming SSE             :b2, after b1,   2d
-    Tool calling base         :b3, after b2,   3d
+    Memory e agent loop                 :done,   b1, after a2,   5d
+    Streaming SSE                       :done,   b2, after b1,   2d
+    Tool calling base                   :done,   b3, after b2,   4d
+
+    section Tool avanzati e Web UI
+    Tool avanzati — PDF, Wikipedia, RAG :done,   c1, after b3,   3d
+    Web UI — HTML, CSS, SSE             :done,   c2, after c1,   3d
+    Tab, sessioni, color picker         :done,   c3, after c2,   3d
 
     section Funzionalità avanzate
-    Tool avanzati e RAG       :c1, after b3,   4d
-    Web UI — tab e sessioni   :c2, after c1,   3d
-    Caricamento immagini      :c3, after c2,   2d
-    KaTeX e titolo smart      :c4, after c3,   2d
+    Immagini, KaTeX, titolo smart       :done,   d1, after c3,   3d
 
     section Modulo RaxeusLyric
-    Download e trascrizione   :d1, after b3,   5d
-    Forced alignment          :d2, after d1,   3d
-    Player e UI lyric         :d3, after d2,   3d
+    Download audio — yt-dlp e FFmpeg    :done,   e1, after d1,   2d
+    Trascrizione — faster-Whisper       :done,   e2, after e1,   3d
+    Forced alignment e player           :done,   e3, after e2,   3d
 
-    section App desktop
-    Bundle macOS (.app)       :e1, after c2,   2d
-    Bundle Windows (.exe)     :e2, after e1,   2d
-    Nuovi loghi e icone       :e3, after e2,   2d
+    section App desktop e branding
+    Bundle macOS e Windows              :done,   f1, after e3,   2d
+    Loghi, AppIcon, documentazione      :done,   f2, after f1,   3d
 
-    section Rifinitura
-    Documentazione tecnica    :f1, after e3,   5d
-    Testing e bug fix         :f2, after f1,   7d
-    Consegna GitHub           :milestone, 2026-05-31, 0d
+    section Testing e correzioni
+    Testing funzionalità                :active, g1, 2026-04-30, 15d
+    Bug fix e ottimizzazioni            :        g2, after g1,   9d
+
+    section Consegna
+    Documentazione finale               :        h1, after g2,   5d
+    Revisione e push finale             :        h2, after h1,   4d
+    Consegna                            :milestone, 2026-06-01, 0d
 ```
