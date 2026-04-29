@@ -132,11 +132,11 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 1. `Invia messaggio`
 2. `Ricevi risposta in streaming`
 3. `Esecuzione automatica tool`
-4. `Apri nuova chat`
-5. `Cambia tab attiva`
-6. `Chiudi tab`
+4. `Crea nuova chat`
+5. `Elimina chat`
+6. `Cambia tab attiva`
 7. `Cerca tra le chat`
-8. `Personalizza colore bolla`
+8. `Modifica colore bolla`
 9. `Carica sessione passata`
 10. `Allega immagini al messaggio`
 11. `Visualizza formula matematica`
@@ -147,12 +147,13 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 13. `Cerca canzone`
 14. `Visualizza testi sincronizzati`
 15. `Riproduci audio`
+16. `Elimina canzone dalla cache`
 
 **CLI:**
 
-16. `Avvia assistente da terminale`
-17. `Diagnostica del sistema (doctor)`
-18. `Rilevamento hardware`
+17. `Avvia assistente da terminale`
+18. `Diagnostica del sistema (doctor)`
+19. `Rilevamento hardware`
 
 ### 6.2 Descrizione semplificata dei casi d'uso
 
@@ -161,11 +162,11 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 | **Invia messaggio** | L'utente digita un testo nella textarea e preme Invio (o il tasto "invia"); il frontend esegue una POST a `/chat` con testo, ID sessione e eventuali immagini base64. |
 | **Ricevi risposta in streaming** | Il backend apre una connessione SSE e invia eventi `token` con ogni chunk di testo; il frontend aggiorna la bolla AI in tempo reale e chiama `marked.parse()` + `renderMathInElement()` ad ogni aggiornamento. |
 | **Esecuzione automatica tool** | Durante la generazione, il modello emette una o più `tool_call`; il backend le esegue (anche in parallelo) e restituisce i risultati al modello che continua la risposta. |
-| **Apri nuova chat** | L'utente clicca `+`; viene creato un UUID univoco, aggiunta una nuova tab con titolo "Nuova chat" e localStorage inizializzato. |
+| **Crea nuova chat** | L'utente clicca `+`; viene creato un UUID univoco, aggiunta una nuova tab con titolo "Nuova chat" e localStorage inizializzato. |
+| **Elimina chat** | L'utente clicca la `×` sulla tab; localStorage e sessione server vengono eliminati via `DELETE /session/<id>`, si attiva la tab precedente. |
 | **Cambia tab attiva** | L'utente clicca su una tab esistente; il frontend carica la cronologia da localStorage e ridisegna la chat. |
-| **Chiudi tab** | L'utente clicca la `×` sulla tab; localStorage e sessione server vengono eliminati, si attiva la tab precedente. |
 | **Cerca tra le chat** | L'utente digita nella barra di ricerca; le tab vengono filtrate in tempo reale per titolo (case-insensitive). |
-| **Personalizza colore bolla** | L'utente clicca il pallino colorato, sceglie un preset o un colore custom; il colore viene salvato in `localStorage` con chiave `bubble_color_<id>`. |
+| **Modifica colore bolla** | L'utente clicca il pallino colorato, sceglie un preset o un colore custom; il colore viene salvato in `localStorage` con chiave `bubble_color_<id>`. |
 | **Carica sessione passata** | All'avvio vengono recuperate le ultime 5 sessioni dal server; selezionandone una, la cronologia viene ripristinata nella tab corrente. |
 | **Allega immagini al messaggio** | L'utente seleziona fino a 3 file dal selettore; `FileReader` li converte in data URI e mostra le anteprime; all'invio vengono inclusi nel payload JSON e il backend li passa al modello vision. |
 | **Visualizza formula matematica** | Le risposte contenenti espressioni LaTeX (`$...$`, `$$...$$`) vengono renderizzate graficamente da KaTeX; il rendering avviene sia durante lo streaming che al ricaricamento dalla cache. |
@@ -173,6 +174,7 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 | **Cerca canzone** | L'utente digita il nome di una canzone in RaxeusLyric; il frontend apre un `EventSource` su `/lyric/api/process`; il backend esegue la pipeline (iTunes → lyrics.ovh → yt-dlp → Whisper → forced alignment) inviando eventi SSE di avanzamento. |
 | **Visualizza testi sincronizzati** | I segmenti con timestamp vengono renderizzati come righe cliccabili; `syncLyrics()` evidenzia la riga attiva ad ogni `timeupdate` dell'audio e fa auto-scroll (inibito per 2.5s se l'utente ha scrollato manualmente). |
 | **Riproduci audio** | Il player in fondo alla pagina RaxeusLyric usa `<audio>` nativo con seek tramite click sulla barra di avanzamento; supporto Range HTTP per lo scrubbing immediato. |
+| **Elimina canzone dalla cache** | L'utente clicca `✕` sulla canzone in libreria; il frontend chiama `POST /lyric/api/delete`; il backend rimuove LRC, mp3 e copertina dal disco e aggiorna `playlist.json`. |
 | **Diagnostica del sistema** | Il comando `doctor` (o `python main.py doctor`) verifica Python ≥ 3.10, raggiungibilità di Ollama, presenza dei modelli configurati e delle dipendenze; stampa un report a checklist. |
 | **Rilevamento hardware** | Il comando `hardware` rileva CPU, RAM totale e GPU (NVIDIA via `nvidia-smi`, Apple via `system_profiler`), calcola la memoria utilizzabile e suggerisce il tier Qwen3 più adatto. |
 
@@ -199,67 +201,31 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 | `Allega immagini al messaggio` | extend | `Invia messaggio` | Se l'utente ha selezionato almeno un'immagine |
 | `Visualizza formula matematica` | extend | `Ricevi risposta in streaming` | Se la risposta contiene espressioni LaTeX |
 | `Generazione automatica titolo chat` | extend | `Ricevi risposta in streaming` | Solo al completamento della prima risposta nella chat |
-| `Carica sessione passata` | extend | `Apri nuova chat` | Se l'utente sceglie una sessione esistente invece di crearne una nuova |
-| `Personalizza colore bolla` | extend | `Apri nuova chat` | La personalizzazione è opzionale |
+| `Carica sessione passata` | extend | `Crea nuova chat` | Se l'utente sceglie una sessione esistente invece di crearne una nuova |
+| `Modifica colore bolla` | extend | `Crea nuova chat` | La personalizzazione è opzionale e disponibile dopo aver aperto una chat |
 
 ### 6.4 Diagramma dei casi d'uso
-
-**Attori e use case:**
 
 ```mermaid
 graph LR
     U1["👤 Utente\nWeb UI"]
 
     U1 --> a(["Invia messaggio"])
-    U1 --> b(["Apri / Chiudi chat"])
-    U1 --> c(["Cerca tra le chat"])
-    U1 --> d(["Carica sessione passata"])
-    U1 --> e(["Personalizza colore bolla"])
-    U1 --> f(["Allega immagini"])
-    U1 --> g(["Cerca canzone — AutoLyric"])
+    U1 --> b(["Crea nuova chat"])
+    U1 --> c(["Elimina chat"])
+    U1 --> d(["Cerca tra le chat"])
+    U1 --> e(["Carica sessione passata"])
+    U1 --> f(["Modifica colore bolla"])
+    U1 --> g(["Allega immagini"])
+    U1 --> h(["Cerca canzone — AutoLyric"])
+    U1 --> i(["Elimina canzone dalla cache"])
 
     U2["👤 Utente\nCLI"]
 
-    U2 --> h(["Conversa da terminale"])
-    U2 --> i(["Salva / Carica sessione"])
-    U2 --> j(["Diagnostica sistema — doctor"])
-    U2 --> k(["Rilevamento hardware"])
-```
-
-**Relazioni include / extend — comportamento dell'agente:**
-
-```mermaid
-graph LR
-    IM(["Invia messaggio"])
-    RS(["Ricevi risposta\nin streaming"])
-    TC(["Esegui tool call\nin autonomia"])
-    WS(["Ricerca web\ngoogle · duckduckgo"])
-    FO(["Leggi / Scrivi file\nPDF · directory"])
-    PY(["Esegui codice Python"])
-    RG(["Ricerca documenti RAG"])
-    LG(["Blocca loop — LoopGuard"])
-    FM(["Rendering formula — KaTeX"])
-    GT(["Genera titolo chat"])
-    VI(["Analisi immagini — vision"])
-    SP(["Carica sessione passata"])
-    NC(["Apri nuova chat"])
-    AL(["Cerca canzone — AutoLyric"])
-    VT(["Visualizza testi sincronizzati"])
-    RA(["Riproduci audio"])
-
-    IM  -->|"«include»"| RS
-    RS  -. "«extend»" .-> TC
-    TC  -. "«extend»" .-> WS
-    TC  -. "«extend»" .-> FO
-    TC  -. "«extend»" .-> PY
-    TC  -. "«extend»" .-> RG
-    TC  -. "«extend»" .-> LG
-    RS  -. "«extend»" .-> FM
-    RS  -. "«extend»" .-> GT
-    VI  -. "«extend»" .-> IM
-    SP  -. "«extend»" .-> NC
-    AL  -->|"«include»"| VT
-    VT  -->|"«include»"| RA
+    U2 --> j(["Conversa da terminale"])
+    U2 --> k(["Salva / Carica sessione"])
+    U2 --> l(["Diagnostica sistema — doctor"])
+    U2 --> m(["Rilevamento hardware"])
 ```
 
 ### 6.5 Flusso di elaborazione del prompt
