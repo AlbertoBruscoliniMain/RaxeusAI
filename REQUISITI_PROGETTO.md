@@ -262,6 +262,51 @@ graph LR
     VT  -->|"«include»"| RA
 ```
 
+### 6.5 Flusso di elaborazione del prompt
+
+```mermaid
+flowchart TD
+    START([Utente invia prompt]) --> IMG{Contiene\nimmagini?}
+
+    IMG -->|Sì — fino a 3| V1[FileReader converte\nin base64 data URI]
+    V1 --> V2[Invia a modello vision\nqwen2.5vl]
+    V2 --> V3[Risposta in streaming\ntoken per token]
+    V3 --> V4[Salva in Memory come testo\nsenza immagine allegata]
+    V4 --> REND
+
+    IMG -->|No| A1[Aggiunge messaggio a Memory]
+    A1 --> A2[Chiama LLM — qwen3:8b\ncon lista tool disponibili]
+    A2 --> DEC{Il modello\ndecide}
+
+    DEC -->|Risposta diretta| S1[Stream token per token\nal browser]
+    DEC -->|Tool call| LG[LoopGuard\ncontrolla la chiamata]
+
+    LG -->|Loop rilevato — blocca| LE[Messaggio di errore\nrestituito al modello]
+    LE --> A2
+
+    LG -->|OK| TW{Quale tool\nviene chiamato?}
+    TW --> TA[google_search\nweb_search · fetch_url]
+    TW --> TB[run_python]
+    TW --> TC[read_file · write_file\nread_pdf · list_dir]
+    TW --> TD[rag_search\nwikipedia_search]
+    TW --> TE[get_datetime]
+
+    TA & TB & TC & TD & TE --> TR[Risultato tool\naggiunto a Memory]
+    TR --> A2
+
+    S1 --> REND[Markdown rendering\nmarked.parse]
+    REND --> LAT{La risposta\ncontiene LaTeX?}
+    LAT -->|Sì| KT[KaTeX renderizza\nla formula]
+    LAT -->|No| NT[Testo normale]
+    KT & NT --> LS[Salva risposta\nin localStorage]
+    LS --> FIRST{È il primo\nmessaggio della chat?}
+    FIRST -->|Sì| TI[POST /title\nmodello genera titolo tab]
+    FIRST -->|No| END
+    TI --> END
+
+    END([Risposta completata])
+```
+
 ---
 
 ## 7. Glossario dei termini
