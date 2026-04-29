@@ -232,6 +232,16 @@ graph LR
 
 ```mermaid
 flowchart TD
+    %% ── Gestione chat ──────────────────────────────
+    CREATE([Utente crea nuova chat]) --> NC[Genera UUID\nNuova tab + localStorage inizializzato]
+    NC --> NTITLE[Titolo provvisorio\nNuova chat]
+
+    DELCHAT([Utente elimina chat]) --> DC[Rimuove localStorage\nDELETE /session/id al server]
+    DC --> PREV[Attiva tab precedente]
+
+    COLOR([Utente modifica colore bolla]) --> SC[Salva in localStorage\nbubble_color_id · aggiorna UI]
+
+    %% ── Invio prompt ────────────────────────────────
     START([Utente invia prompt]) --> IMG{Contiene\nimmagini?}
 
     IMG -->|Sì — fino a 3| V1[FileReader converte\nin base64 data URI]
@@ -304,6 +314,14 @@ flowchart TD
     SYNC --> SEEK{Utente\nclicca una riga?}
     SEEK -->|Sì| JMP[Salta al timestamp\naudioEl.currentTime]
     SEEK -->|No| SYNC
+
+    %% ── Elimina canzone dalla cache ─────────────────
+    DEL([Utente clicca ✕ su una canzone]) --> CONF{Conferma\neliminazione?}
+    CONF -->|No| CANCEL[Annullato]
+    CONF -->|Sì| DAPI[POST /lyric/api/delete]
+    DAPI --> DFILES[Rimuove dal disco\n.lrc · mp3 · copertina]
+    DFILES --> DJSON[Aggiorna playlist.json]
+    DJSON --> DUI[Rimuove voce dalla libreria\nReset player se era in riproduzione]
 ```
 
 ---
