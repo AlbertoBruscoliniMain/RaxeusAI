@@ -307,6 +307,39 @@ flowchart TD
     END([Risposta completata])
 ```
 
+### 6.6 Flusso AutoLyric — ricerca e sincronizzazione canzone
+
+```mermaid
+flowchart TD
+    START([Utente cerca una canzone]) --> CACHE{Canzone già\nin cache?}
+
+    CACHE -->|Sì| HIT[Carica segmenti LRC\ne audio da playlist.json]
+    HIT --> PLAYER
+
+    CACHE -->|No| IT[iTunes Search API\nTitolo canonico · artista · copertina]
+    IT --> LY{lyrics.ovh\nTesto ufficiale trovato?}
+
+    LY -->|Sì| LP[Testo trovato\nPreview righe mostrata subito]
+    LY -->|No| LN[Testo non disponibile\nsi userà solo Whisper]
+
+    LP & LN --> DL[yt-dlp + FFmpeg\nDownload audio da YouTube]
+    DL --> WH[faster-Whisper\nTrascrizione con word_timestamps]
+
+    WH --> ALIGN{Testo ufficiale\ndisponibile?}
+    ALIGN -->|Sì| FA[Forced alignment\nprogrammazione dinamica\ntesto ↔ parole Whisper]
+    ALIGN -->|No| WT[Usa trascrizione\nWhisper diretta]
+
+    FA & WT --> SAVE[Salva su disco\n.lrc · audio/mp3 · cover · playlist.json]
+    SAVE --> PLAYER
+
+    PLAYER([Segmenti caricati nel browser\nriga + timestamp per ognuna])
+    PLAYER --> PLAY[Utente avvia riproduzione]
+    PLAY --> SYNC[timeupdate → syncLyrics\nevidenzia riga attiva · auto-scroll]
+    SYNC --> SEEK{Utente\nclicca una riga?}
+    SEEK -->|Sì| JMP[Salta al timestamp\naudioEl.currentTime]
+    SEEK -->|No| SYNC
+```
+
 ---
 
 ## 7. Glossario dei termini
