@@ -208,50 +208,58 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 
 ```mermaid
 graph LR
-    U1["👤 Utente locale\n· Web UI ·"]
+    U1["👤 Utente\nWeb UI"]
 
     U1 --> a(["Invia messaggio"])
-    U1 --> b(["Apri nuova chat"])
-    U1 --> c(["Cambia tab attiva"])
-    U1 --> d(["Chiudi tab"])
-    U1 --> e(["Cerca tra le chat"])
-    U1 --> f(["Personalizza colore bolla"])
-    U1 --> g(["Carica sessione passata"])
-    U1 --> h(["Allega immagini al messaggio"])
-    U1 --> i(["Cerca canzone · RaxeusLyric"])
+    U1 --> b(["Apri / Chiudi chat"])
+    U1 --> c(["Cerca tra le chat"])
+    U1 --> d(["Carica sessione passata"])
+    U1 --> e(["Personalizza colore bolla"])
+    U1 --> f(["Allega immagini"])
+    U1 --> g(["Cerca canzone — AutoLyric"])
 
-    U2["👤 Utente locale\n· CLI ·"]
+    U2["👤 Utente\nCLI"]
 
-    U2 --> j(["Avvia assistente da terminale"])
-    U2 --> k(["Diagnostica sistema · doctor"])
-    U2 --> l(["Rilevamento hardware"])
-    U2 --> m(["Salva / Carica sessione"])
+    U2 --> h(["Conversa da terminale"])
+    U2 --> i(["Salva / Carica sessione"])
+    U2 --> j(["Diagnostica sistema — doctor"])
+    U2 --> k(["Rilevamento hardware"])
 ```
 
-**Relazioni include / extend:**
+**Relazioni include / extend — comportamento dell'agente:**
 
 ```mermaid
 graph LR
     IM(["Invia messaggio"])
-    RS(["Ricevi risposta in streaming"])
-    ET(["Esecuzione automatica tool"])
-    FM(["Visualizza formula matematica"])
-    GT(["Generazione titolo chat"])
-    AI(["Allega immagini al messaggio"])
-    CC(["Cerca canzone"])
-    VT(["Visualizza testi sincronizzati"])
-    RA(["Riproduci audio"])
+    RS(["Ricevi risposta\nin streaming"])
+    TC(["Esegui tool call\nin autonomia"])
+    WS(["Ricerca web\ngoogle · duckduckgo"])
+    FO(["Leggi / Scrivi file\nPDF · directory"])
+    PY(["Esegui codice Python"])
+    RG(["Ricerca documenti RAG"])
+    LG(["Blocca loop — LoopGuard"])
+    FM(["Rendering formula — KaTeX"])
+    GT(["Genera titolo chat"])
+    VI(["Analisi immagini — vision"])
     SP(["Carica sessione passata"])
     NC(["Apri nuova chat"])
+    AL(["Cerca canzone — AutoLyric"])
+    VT(["Visualizza testi sincronizzati"])
+    RA(["Riproduci audio"])
 
-    IM      -->|"«include»"| RS
-    RS      -->|"«include»"| ET
-    RS      -. "«extend»" .-> FM
-    RS      -. "«extend»" .-> GT
-    AI      -. "«extend»" .-> IM
-    SP      -. "«extend»" .-> NC
-    CC      -->|"«include»"| VT
-    VT      -->|"«include»"| RA
+    IM  -->|"«include»"| RS
+    RS  -. "«extend»" .-> TC
+    TC  -. "«extend»" .-> WS
+    TC  -. "«extend»" .-> FO
+    TC  -. "«extend»" .-> PY
+    TC  -. "«extend»" .-> RG
+    TC  -. "«extend»" .-> LG
+    RS  -. "«extend»" .-> FM
+    RS  -. "«extend»" .-> GT
+    VI  -. "«extend»" .-> IM
+    SP  -. "«extend»" .-> NC
+    AL  -->|"«include»"| VT
+    VT  -->|"«include»"| RA
 ```
 
 ---
