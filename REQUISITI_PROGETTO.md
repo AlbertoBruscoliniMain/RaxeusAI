@@ -1,8 +1,5 @@
 # Documento dei Requisiti — RaxeusAI
 
-**🔗 Link GitHub:** [https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md](https://github.com/AlbertoBruscoliniMain/RaxeusAI/blob/main/REQUISITI_PROGETTO.md)
-
-> Progetto di fine anno — modulo `03_Sviluppo_Web_e_Database`
 > **Studente:** Alberto Bruscolini
 
 ---
