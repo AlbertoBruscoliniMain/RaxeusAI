@@ -10,7 +10,6 @@
 
 Questo documento:
 
-- descrive il prodotto realizzato dallo studente Alberto Bruscolini;
 - raccoglie i requisiti funzionali e non funzionali;
 - presenta i diagrammi e i casi d'uso organizzati nelle fasi di analisi, sviluppo e rifinitura;
 - definisce la roadmap di lavoro con milestone e Gantt.
