@@ -220,7 +220,7 @@ graph LR
     U1["👤 Utente\nWeb UI"]
     U2["👤 Utente\nCLI"]
 
-    subgraph CHAT["💬 Chat"]
+    subgraph CHAT["Chat"]
         a(["Invia messaggio"])
         b(["Crea nuova chat"])
         c(["Elimina chat"])
@@ -235,14 +235,14 @@ graph LR
         ti(["Generazione titolo chat"])
     end
 
-    subgraph LYRIC["🎵 RaxeusLyric"]
+    subgraph LYRIC["RaxeusLyric"]
         h(["Cerca canzone"])
         i(["Elimina canzone dalla cache"])
         s(["Visualizza testi sincronizzati"])
         p(["Riproduci audio"])
     end
 
-    subgraph CLI["💻 CLI"]
+    subgraph CLI["CLI"]
         j(["Conversa da terminale"])
         rst(["Reset memoria"])
         sv(["Salva sessione"])
