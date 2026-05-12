@@ -981,11 +981,14 @@
     setStatus('Caricamento…', 'spin'); barSet('30%');
     songName.textContent = title; searchInput.value = title;
     lyricsCont.innerHTML = ''; emptyState.style.display = 'none';
-    fetch(`/lyric/api/load?title=${encodeURIComponent(title)}`).then(r => r.json()).then(d => {
-      barDone();
-      if (d.error) { setStatus(d.error, 'err'); return; }
-      loadSong(title, d.segments, d.audio, true, d.cover); highlightPlaylist(title);
-    });
+    fetch(`/lyric/api/load?title=${encodeURIComponent(title)}`)
+      .then(r => r.json())
+      .then(d => {
+        barDone();
+        if (d.error) { setStatus(d.error, 'err'); return; }
+        loadSong(title, d.segments, d.audio, true, d.cover); highlightPlaylist(title);
+      })
+      .catch(() => { barDone(); setStatus('Errore caricamento', 'err'); });
   }
 
   function highlightPlaylist(title) {

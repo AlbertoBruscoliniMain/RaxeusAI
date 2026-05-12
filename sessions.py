@@ -5,10 +5,10 @@ from pathlib import Path
 SESSIONS_DIR = Path(__file__).parent / "sessions"
 
 
-def save_session(history: list) -> str:
+def save_session(history: list, session_id: str | None = None) -> str:
     SESSIONS_DIR.mkdir(exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = SESSIONS_DIR / f"session_{timestamp}.json"
+    name = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = SESSIONS_DIR / f"session_{name}.json"
     messages = [m for m in history if m.get("role") != "system"]
     with open(path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)

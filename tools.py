@@ -60,8 +60,10 @@ def web_search(query: str) -> str:
 def read_file(path: str) -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return content if content else "(file vuoto)"
+            content = f.read(8000)
+        if not content:
+            return "(file vuoto)"
+        return content + "\n…[file troncato]" if len(content) >= 8000 else content
     except FileNotFoundError:
         return f"File non trovato: {path}"
     except Exception as e:

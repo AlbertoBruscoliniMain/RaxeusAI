@@ -3,6 +3,8 @@ import uuid
 import os
 import glob
 import mimetypes
+import threading
+import queue as _queue
 import urllib.parse
 import urllib.request
 from flask import Flask, request, Response, render_template, jsonify, send_file, stream_with_context
@@ -53,7 +55,7 @@ def chat():
         yield f"data: {json.dumps({'type': 'session_id', 'value': session_id})}\n\n"
         for event in chat_stream(message, mem, images=images or None):
             yield f"data: {json.dumps(event)}\n\n"
-        save_session(mem.get())
+        save_session(mem.get(), session_id)
 
     return Response(
         generate(),
@@ -234,20 +236,50 @@ def lyric_process():
 
         yield _lyric_ev("progress", message="Download audio...")
         search_q = f"{title} {artist}".strip() if (title and artist) else query
-        try:
-            audio_path, dl_meta = download_audio(search_q)
-        except Exception as e:
-            yield _lyric_ev("error", message=f"Errore download: {e}")
-            return
+
+        dl_q = _queue.Queue()
+        def _do_download():
+            try:
+                dl_q.put((True, download_audio(search_q)))
+            except Exception as e:
+                dl_q.put((False, e))
+        threading.Thread(target=_do_download, daemon=True).start()
+
+        audio_path = dl_meta = None
+        while audio_path is None:
+            try:
+                ok, value = dl_q.get(timeout=15)
+            except _queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if not ok:
+                yield _lyric_ev("error", message=f"Errore download: {value}")
+                return
+            audio_path, dl_meta = value
 
         yield _lyric_ev("progress", message="Analisi timing audio...")
-        try:
-            segments = get_transcription(audio_path, hint_lyrics=lyrics)
-        except Exception as e:
-            if os.path.exists(audio_path):
-                os.remove(audio_path)
-            yield _lyric_ev("error", message=f"Errore analisi: {e}")
-            return
+
+        tr_q = _queue.Queue()
+        def _do_transcribe():
+            try:
+                tr_q.put((True, get_transcription(audio_path, hint_lyrics=lyrics)))
+            except Exception as e:
+                tr_q.put((False, e))
+        threading.Thread(target=_do_transcribe, daemon=True).start()
+
+        segments = None
+        while segments is None:
+            try:
+                ok, value = tr_q.get(timeout=15)
+            except _queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if not ok:
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                yield _lyric_ev("error", message=f"Errore analisi: {value}")
+                return
+            segments = value
 
         os.makedirs(_LYRIC_AUDIO, exist_ok=True)
         audio_filename = f"{safe_title(display_title)}.mp3"
