@@ -207,20 +207,54 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 
 ```mermaid
 graph LR
+    %% ── ATTORI ────────────────────────────────────────
     U1["👤 Utente\nWeb UI"]
-
-    U1 --> a(["Invia messaggio"])
-    U1 --> b(["Crea nuova chat"])
-    U1 --> c(["Elimina chat"])
-    U1 --> d(["Cerca tra le chat"])
-    U1 --> e(["Carica sessione passata"])
-    U1 --> f(["Modifica colore bolla"])
-    U1 --> g(["Allega immagini"])
-    U1 --> h(["Cerca canzone — AutoLyric"])
-    U1 --> i(["Elimina canzone dalla cache"])
-
     U2["👤 Utente\nCLI"]
 
+    %% ── CASI D'USO — Web UI ───────────────────────────
+    a(["Invia messaggio"])
+    b(["Crea nuova chat"])
+    c(["Elimina chat"])
+    d(["Cerca tra le chat"])
+    e(["Carica sessione passata"])
+    f(["Modifica colore bolla"])
+    g(["Allega immagini"])
+    h(["Cerca canzone"])
+    i(["Elimina canzone dalla cache"])
+
+    %% inclusi / estesi
+    r(["Ricevi risposta in streaming"])
+    t(["Esecuzione automatica tool"])
+    lx(["Visualizza formula LaTeX"])
+    ti(["Generazione titolo chat"])
+    s(["Visualizza testi sincronizzati"])
+    p(["Riproduci audio"])
+
+    %% Attore → casi d'uso diretti
+    U1 --> a
+    U1 --> b
+    U1 --> c
+    U1 --> d
+    U1 --> e
+    U1 --> f
+    U1 --> g
+    U1 --> h
+    U1 --> i
+
+    %% relazioni <<include>>
+    a -.->|"<<include>>"| r
+    r -.->|"<<include>>"| t
+    h -.->|"<<include>>"| s
+    s -.->|"<<include>>"| p
+
+    %% relazioni <<extend>>
+    g -.->|"<<extend>>"| a
+    lx -.->|"<<extend>>"| r
+    ti -.->|"<<extend>>"| r
+    e -.->|"<<extend>>"| b
+    f -.->|"<<extend>>"| b
+
+    %% ── CASI D'USO — CLI ──────────────────────────────
     U2 --> j(["Conversa da terminale"])
     U2 --> k(["Salva / Carica sessione"])
     U2 --> l(["Diagnostica sistema — doctor"])
