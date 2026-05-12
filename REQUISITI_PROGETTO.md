@@ -303,43 +303,52 @@ flowchart TD
     %% ── Invio prompt ────────────────────────────────
     START([Utente invia prompt]) --> IMG{Contiene\nimmagini?}
 
-    IMG -->|Sì — fino a 3| V1[FileReader converte\nin base64 data URI]
-    V1 --> V2[Invia a modello vision\nqwen2.5vl]
-    V2 --> V3[Risposta in streaming\ntoken per token]
-    V3 --> V4[Salva in Memory come testo\nsenza immagine allegata]
+    subgraph EXT_IMG["&lt;&lt;extend&gt;&gt;  Allega immagini al messaggio"]
+        V1[FileReader converte\nin base64 data URI] --> V2[Invia a modello vision\nqwen2.5vl]
+        V2 --> V3[Risposta in streaming\ntoken per token]
+        V3 --> V4[Salva in Memory come testo\nsenza immagine allegata]
+    end
+
+    IMG -->|Sì — fino a 3| V1
     V4 --> REND
 
     IMG -->|No| A1[Aggiunge messaggio a Memory]
     A1 --> A2[Chiama LLM — qwen3:8b\ncon lista tool disponibili]
     A2 --> DEC{Il modello\ndecide}
 
-    DEC -->|Risposta diretta| S1[Stream token per token\nal browser]
-    DEC -->|Tool call| LG[LoopGuard\ncontrolla la chiamata]
+    DEC -->|"<<include>> risposta diretta"| S1[Stream token per token\nal browser]
 
-    LG -->|Loop rilevato — blocca| LE[Messaggio di errore\nrestituito al modello]
+    subgraph EXT_TOOL["&lt;&lt;extend&gt;&gt;  Esecuzione automatica tool"]
+        LG[LoopGuard\ncontrolla la chiamata]
+        LE[Messaggio di errore\nrestituito al modello]
+        TW{Quale tool?}
+        TA[google_search / web_search\nfetch_url]
+        TB[run_python]
+        TC[read_file / write_file\nread_pdf / list_dir]
+        TDRG[rag_search\nwikipedia_search]
+        TGET[get_datetime]
+        TR[Risultato tool\naggiunto a Memory]
+        LG -->|Loop rilevato — blocca| LE
+        LG -->|OK| TW
+        TW --> TA & TB & TC & TDRG & TGET
+        TA & TB & TC & TDRG & TGET --> TR
+    end
+
+    DEC -->|"<<extend>> tool call"| LG
     LE --> A2
-
-    LG -->|OK| TW{Quale tool\nviene chiamato?}
-    TW --> TA[google_search\nweb_search · fetch_url]
-    TW --> TB[run_python]
-    TW --> TC[read_file · write_file\nread_pdf · list_dir]
-    TW --> TD[rag_search\nwikipedia_search]
-    TW --> TE[get_datetime]
-
-    TA & TB & TC & TD & TE --> TR[Risultato tool\naggiunto a Memory]
     TR --> A2
 
     S1 --> REND[Markdown rendering\nmarked.parse]
     REND --> LAT{La risposta\ncontiene LaTeX?}
-    LAT -->|Sì| KT[KaTeX renderizza\nla formula]
+    LAT -->|"Sì — <<extend>>"| KT[KaTeX renderizza\nla formula]
     LAT -->|No| NT[Testo normale]
     KT & NT --> LS[Salva risposta\nin localStorage]
     LS --> FIRST{È il primo\nmessaggio della chat?}
-    FIRST -->|Sì| TI[POST /title\nmodello genera titolo tab]
-    FIRST -->|No| END
-    TI --> END
+    FIRST -->|"Sì — <<extend>>"| TI[POST /title\nmodello genera titolo tab]
+    FIRST -->|No| FINE
+    TI --> FINE
 
-    END([Risposta completata])
+    FINE([Risposta completata])
 ```
 
 ### 6.6 Flusso AutoLyric — ricerca e sincronizzazione canzone
@@ -349,8 +358,6 @@ flowchart TD
     START([Utente cerca una canzone]) --> CACHE{Canzone già\nin cache?}
 
     CACHE -->|Sì| HIT[Carica segmenti LRC\ne audio da playlist.json]
-    HIT --> PLAYER
-
     CACHE -->|No| IT[iTunes Search API\nTitolo canonico · artista · copertina]
     IT --> LY{lyrics.ovh\nTesto ufficiale trovato?}
 
@@ -365,14 +372,26 @@ flowchart TD
     ALIGN -->|No| WT[Usa trascrizione\nWhisper diretta]
 
     FA & WT --> SAVE[Salva su disco\n.lrc · audio/mp3 · cover · playlist.json]
-    SAVE --> PLAYER
 
-    PLAYER([Segmenti caricati nel browser\nriga + timestamp per ognuna])
-    PLAYER --> PLAY[Utente avvia riproduzione]
-    PLAY --> SYNC[timeupdate → syncLyrics\nevidenzia riga attiva · auto-scroll]
-    SYNC --> SEEK{Utente\nclicca una riga?}
-    SEEK -->|Sì| JMP[Salta al timestamp\naudioEl.currentTime]
-    SEEK -->|No| SYNC
+    SAVE -->|"<<include>>"| PLAYER
+    HIT -->|"<<include>>"| PLAYER
+
+    subgraph INC_VIS["&lt;&lt;include&gt;&gt;  Visualizza testi sincronizzati"]
+        PLAYER([Segmenti caricati nel browser\nriga + timestamp per ognuna])
+
+        subgraph INC_PLAY["&lt;&lt;include&gt;&gt;  Riproduci audio"]
+            PLAY[Utente avvia riproduzione]
+            SYNC[timeupdate → syncLyrics\nevidenzia riga attiva · auto-scroll]
+            SEEK{Utente\nclicca una riga?}
+            JMP[Salta al timestamp\naudioEl.currentTime]
+            PLAY --> SYNC
+            SYNC --> SEEK
+            SEEK -->|Sì| JMP
+            SEEK -->|No| SYNC
+        end
+
+        PLAYER --> PLAY
+    end
 
     %% ── Elimina canzone dalla cache ─────────────────
     DEL([Utente clicca ✕ su una canzone]) --> CONF{Conferma\neliminazione?}
