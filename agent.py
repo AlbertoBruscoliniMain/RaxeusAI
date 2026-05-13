@@ -1,5 +1,7 @@
 import json
 import concurrent.futures
+import threading
+import queue as _queue
 from openai import OpenAI
 from memory import Memory
 from config import MODEL, VISION_MODEL, OLLAMA_URL
@@ -130,6 +132,8 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
     guard = LoopGuard()
 
     if images:
+        yield {"type": "thinking"}
+
         content = [{"type": "text", "text": user_input or "Descrivi queste immagini."}]
         for img_b64 in images:
             content.append({"type": "image_url", "image_url": {"url": img_b64}})
@@ -141,20 +145,57 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
             "Non inventare dettagli non presenti. Non assumere personalità o tono: "
             "rispondi in modo diretto, fattuale e concreto."
         )
-        recent = [m for m in mem.get() if m.get("role") in ("user", "assistant")][-6:]
+        # Il modello vision non accetta tool_calls nello storico: prendiamo solo
+        # i messaggi con contenuto testuale puro per dargli un minimo di contesto.
+        recent = []
+        for m in mem.get():
+            if m.get("role") not in ("user", "assistant"):
+                continue
+            text = m.get("content", "")
+            if isinstance(text, str) and text.strip():
+                recent.append({"role": m["role"], "content": text})
+        recent = recent[-6:]
+
         vision_messages = (
             [{"role": "system", "content": vision_system}]
             + recent
             + [{"role": "user", "content": content}]
         )
-        stream = client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=vision_messages,
-            stream=True,
-        )
+
+        # Il primo caricamento del modello vision in Ollama può richiedere decine
+        # di secondi: eseguiamo la chiamata in un thread e yieldiamo eventi
+        # `thinking` ogni 10s per tenere viva la connessione SSE (WKWebView
+        # chiude le richieste senza dati dopo ~60s).
+        q = _queue.Queue()
+        def _vision_worker():
+            try:
+                stream = client.chat.completions.create(
+                    model=VISION_MODEL,
+                    messages=vision_messages,
+                    stream=True,
+                )
+                for chunk in stream:
+                    q.put(("chunk", chunk))
+                q.put(("done", None))
+            except Exception as e:
+                q.put(("error", e))
+        threading.Thread(target=_vision_worker, daemon=True).start()
 
         full_content = ""
-        for chunk in stream:
+        while True:
+            try:
+                kind, value = q.get(timeout=10)
+            except _queue.Empty:
+                yield {"type": "thinking"}
+                continue
+            if kind == "error":
+                msg = f"❌ Errore con il modello vision ({VISION_MODEL}): {value}"
+                yield {"type": "token", "content": msg}
+                full_content = msg
+                break
+            if kind == "done":
+                break
+            chunk = value
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta

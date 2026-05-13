@@ -30,6 +30,68 @@ except ImportError:
     _PYPDF_OK = False
 
 try:
+    from docx import Document as _DocxDocument
+    _DOCX_OK = True
+except ImportError:
+    _DOCX_OK = False
+
+_MAX_READ_CHARS = 8000
+_TEXT_EXTS = {
+    ".txt", ".md", ".markdown", ".rst", ".log",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".scss",
+    ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env",
+    ".csv", ".tsv", ".xml", ".svg",
+    ".sh", ".bash", ".zsh", ".ps1", ".bat",
+    ".c", ".cpp", ".h", ".hpp", ".java", ".kt", ".go", ".rs", ".rb", ".php",
+    ".sql", ".lua", ".swift", ".m", ".r", ".jl",
+    ".gitignore", ".dockerfile",
+}
+
+
+def _truncate(text: str) -> str:
+    if len(text) > _MAX_READ_CHARS:
+        return text[:_MAX_READ_CHARS] + "\n…[file troncato]"
+    return text
+
+
+def _read_docx(path: str) -> str:
+    if not _DOCX_OK:
+        return "Errore: libreria python-docx non installata."
+    try:
+        doc = _DocxDocument(path)
+        parts = [p.text for p in doc.paragraphs if p.text.strip()]
+        for tbl in doc.tables:
+            for row in tbl.rows:
+                cells = [c.text.strip() for c in row.cells]
+                parts.append(" | ".join(cells))
+        text = "\n".join(parts)
+        return _truncate(text) if text.strip() else "(documento vuoto)"
+    except Exception as e:
+        return f"Errore docx: {e}"
+
+
+def _read_pdf(path: str) -> str:
+    if not _PYPDF_OK:
+        return "Errore: libreria pypdf non installata."
+    try:
+        reader = PdfReader(path)
+        text = "\n".join(p.extract_text() or "" for p in reader.pages)
+        return _truncate(text) if text.strip() else "(nessun testo estraibile)"
+    except Exception as e:
+        return f"Errore pdf: {e}"
+
+
+def _read_plain(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read(_MAX_READ_CHARS + 1)
+        if not content:
+            return "(file vuoto)"
+        return _truncate(content)
+    except Exception as e:
+        return f"Errore: {e}"
+
+try:
     import chromadb
     from config import RAG_DB_PATH
     _CHROMA_OK = True
@@ -58,16 +120,16 @@ def web_search(query: str) -> str:
 
 
 def read_file(path: str) -> str:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read(8000)
-        if not content:
-            return "(file vuoto)"
-        return content + "\n…[file troncato]" if len(content) >= 8000 else content
-    except FileNotFoundError:
+    if not os.path.exists(path):
         return f"File non trovato: {path}"
-    except Exception as e:
-        return f"Errore: {e}"
+    if os.path.isdir(path):
+        return f"'{path}' è una directory: usa list_dir."
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".pdf":
+        return _read_pdf(path)
+    if ext == ".docx":
+        return _read_docx(path)
+    return _read_plain(path)
 
 
 def write_file(path: str, content: str) -> str:
@@ -157,17 +219,9 @@ def append_file(path: str, content: str) -> str:
 
 
 def read_pdf(path: str) -> str:
-    if not _PYPDF_OK:
-        return "Errore: libreria pypdf non installata."
-    try:
-        reader = PdfReader(path)
-        pages = [page.extract_text() or "" for page in reader.pages]
-        text = "\n".join(pages)
-        return text[:4000] if text.strip() else "(nessun testo estraibile)"
-    except FileNotFoundError:
+    if not os.path.exists(path):
         return f"File non trovato: {path}"
-    except Exception as e:
-        return f"Errore: {e}"
+    return _read_pdf(path)
 
 
 def rag_search(query: str, n_results: int = 4) -> str:
@@ -271,7 +325,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Legge il contenuto di un file dal filesystem.",
+            "description": "Legge qualsiasi file dal filesystem: testo semplice (txt, md, codice sorgente, json, yaml, csv, log, ecc.), documenti Word (.docx) o PDF. Riconosce automaticamente il formato dall'estensione. L'output è troncato a 8000 caratteri.",
             "parameters": {
                 "type": "object",
                 "properties": {

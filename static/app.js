@@ -198,11 +198,11 @@ function updateChatBottom() {
   chatEl.style.bottom = document.getElementById('input-wrap').offsetHeight + 'px';
 }
 
-imgInput.addEventListener('change', () => {
-  const files = Array.from(imgInput.files);
+function addImageFiles(files) {
   const slots = MAX_IMAGES - selectedImages.length;
+  if (slots <= 0) return Promise.resolve();
   const toAdd = files.slice(0, slots);
-  Promise.all(
+  return Promise.all(
     toAdd.map(file => new Promise(resolve => {
       const reader = new FileReader();
       reader.onload = e => resolve({ file, dataUrl: e.target.result });
@@ -212,7 +212,27 @@ imgInput.addEventListener('change', () => {
     selectedImages = [...selectedImages, ...results];
     renderImagePreviews();
   });
+}
+
+imgInput.addEventListener('change', () => {
+  addImageFiles(Array.from(imgInput.files));
   imgInput.value = '';
+});
+
+document.addEventListener('paste', e => {
+  if (isStreaming) return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const pasted = [];
+  for (const item of items) {
+    if (item.kind === 'file' && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) pasted.push(file);
+    }
+  }
+  if (pasted.length === 0) return;
+  e.preventDefault();
+  addImageFiles(pasted);
 });
 
 function scrollBottom() {

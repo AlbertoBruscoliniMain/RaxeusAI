@@ -4,6 +4,7 @@ googlesearch-python
 requests
 beautifulsoup4
 pypdf
+python-docx
 flask
 chromadb
 pywebview
