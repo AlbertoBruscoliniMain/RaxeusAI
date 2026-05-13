@@ -2,15 +2,54 @@ import json
 import concurrent.futures
 import threading
 import queue as _queue
+import urllib.request
 from openai import OpenAI
 from memory import Memory
-from config import MODEL, VISION_MODEL, OLLAMA_URL
+from config import MODEL, VISION_MODEL, VISION_FALLBACKS, OLLAMA_URL
 from tools import TOOL_SCHEMAS, execute_tool
 from loop_guard import LoopGuard
 
 client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
 memory = Memory()
 _guard = LoopGuard()
+
+_resolved_vision_model: str | None = None
+
+
+def _list_ollama_models() -> list[str]:
+    base = OLLAMA_URL.rstrip("/").removesuffix("/v1")
+    try:
+        with urllib.request.urlopen(f"{base}/api/tags", timeout=3) as r:
+            data = json.loads(r.read())
+        return [m.get("name", "") for m in data.get("models", [])]
+    except Exception:
+        return []
+
+
+def _resolve_vision_model() -> str:
+    """Restituisce il primo modello vision disponibile in Ollama, partendo
+    dal VISION_MODEL preferito e cadendo sui fallback. Cached dopo la prima
+    chiamata. Se nessuno è installato, restituisce comunque VISION_MODEL
+    (l'errore arriverà al primo uso, ma con messaggio chiaro)."""
+    global _resolved_vision_model
+    if _resolved_vision_model is not None:
+        return _resolved_vision_model
+    installed = set(_list_ollama_models())
+    if not installed:
+        _resolved_vision_model = VISION_MODEL
+        return _resolved_vision_model
+    candidates = (VISION_MODEL,) + tuple(VISION_FALLBACKS)
+    base_names = {n.split(":")[0]: n for n in installed}
+    for cand in candidates:
+        if cand in installed:
+            _resolved_vision_model = cand
+            return cand
+        base = cand.split(":")[0]
+        if base in base_names:
+            _resolved_vision_model = base_names[base]
+            return _resolved_vision_model
+    _resolved_vision_model = VISION_MODEL
+    return _resolved_vision_model
 
 
 def _exec_one(tc: dict) -> tuple[dict, str]:
@@ -166,11 +205,12 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
         # di secondi: eseguiamo la chiamata in un thread e yieldiamo eventi
         # `thinking` ogni 10s per tenere viva la connessione SSE (WKWebView
         # chiude le richieste senza dati dopo ~60s).
+        vision_model = _resolve_vision_model()
         q = _queue.Queue()
         def _vision_worker():
             try:
                 stream = client.chat.completions.create(
-                    model=VISION_MODEL,
+                    model=vision_model,
                     messages=vision_messages,
                     stream=True,
                 )
@@ -189,7 +229,15 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
                 yield {"type": "thinking"}
                 continue
             if kind == "error":
-                msg = f"❌ Errore con il modello vision ({VISION_MODEL}): {value}"
+                err_str = str(value)
+                if "not found" in err_str.lower() or "404" in err_str:
+                    msg = (
+                        f"❌ Nessun modello vision disponibile in Ollama.\n\n"
+                        f"Installane uno con uno di questi comandi:\n"
+                        f"```\nollama pull {VISION_MODEL}\nollama pull llava\nollama pull moondream\n```"
+                    )
+                else:
+                    msg = f"❌ Errore con il modello vision ({vision_model}): {err_str}"
                 yield {"type": "token", "content": msg}
                 full_content = msg
                 break

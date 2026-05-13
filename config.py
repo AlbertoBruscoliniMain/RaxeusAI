@@ -5,7 +5,11 @@ from datetime import datetime
 RAG_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rag_db")
 
 MODEL = "qwen3:8b"          # modello Ollama da usare
-VISION_MODEL = "qwen2.5vl:7b"  # modello Ollama per analisi immagini
+VISION_MODEL = "qwen2.5vl:7b"  # modello Ollama per analisi immagini (preferito)
+# Fallback automatico se VISION_MODEL non è installato: si prende il primo
+# disponibile nell'ordine — utile quando si distribuisce l'app su macchine
+# diverse senza obbligare l'utente a fare `ollama pull qwen2.5vl:7b`.
+VISION_FALLBACKS = ("qwen2.5vl:3b", "llava:latest", "llava", "llama3.2-vision", "minicpm-v", "moondream")
 OLLAMA_URL = "http://localhost:11434/v1"
 AI_NAME = "Raxeus"          # nome del tuo assistente
 _TODAY = datetime.now().strftime("%A %d %B %Y")
