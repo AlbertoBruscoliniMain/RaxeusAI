@@ -295,27 +295,17 @@ La restrizione si applica all'intero contesto del bundle: bash, Python, `cp` —
 
 Dopo qualsiasi spostamento del progetto è obbligatorio rieseguire `bash create_app.sh` — il bundle contiene path assoluti.
 
-### Bundle Windows (.exe)
+### Bundle Windows (.exe) — rimosso
 
-Su Windows non esiste un equivalente di `.app` — un'app si distribuisce come `.exe` (più eventuali DLL accanto). Il tool standard per impacchettare un progetto Python è **PyInstaller**: legge l'entry point, traccia tutti i moduli importati, e produce in `dist/<NomeApp>/` una cartella con l'`.exe` e tutte le DLL/dati necessari (incluso l'interprete Python embedded).
+In una versione precedente esisteva `create_app.ps1` che usava **PyInstaller** per produrre un `.exe` Windows. È stato rimosso dalla repo perché il `launcher.py` bundlato è scritto specificamente per macOS (`osascript`, path Homebrew, notifiche AppleScript): l'eseguibile crashava all'avvio.
 
-`create_app.ps1` lo usa con i seguenti flag chiave:
-
-| Flag | Effetto |
-|---|---|
-| `--windowed` | Niente console nera che si apre dietro la finestra |
-| `--icon AppIcon.ico` | Imposta l'icona del file `.exe` |
-| `--add-data "templates;templates"` | Copia i template Flask nel bundle (separatore `;` su Windows) |
-| `--add-data "static;static"` | Copia CSS/JS/logo nel bundle |
-| `--hidden-import openai` (e altri) | Forza l'inclusione di pacchetti che PyInstaller non rileva da solo (caricati dinamicamente) |
-
-L'icona Windows è in formato `.ico`: contiene più risoluzioni (16/32/48/64/128/256) come `.icns` su Mac. Pillow la genera direttamente da `static/logo.png`.
-
-A differenza di macOS, Windows non ha TCC: il progetto può stare ovunque, anche su Desktop. La WebView nativa è **Edge WebView2** (Chromium), pre-installata su Windows 11. Su Windows 10 può essere necessario installare il [runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
+Su Windows resta disponibile la sola modalità CLI (`python main.py`), che è completamente cross-platform. Roadmap del port in [BUGS.md BUG-011](BUGS.md).
 
 ---
 
-## Cross-platform — strategie applicate
+## Cross-platform — strategie applicate (dove ha senso)
+
+Il **core dell'agente** (`agent.py`, `tools.py`, `memory.py`, `sessions.py`, `main.py`, `hardware.py`, `loop_guard.py`, `doctor.py`) è cross-platform per costruzione. Le tecniche applicate:
 
 | Punto | Soluzione |
 |---|---|
@@ -323,9 +313,9 @@ A differenza di macOS, Windows non ha TCC: il progetto può stare ovunque, anche
 | Path file/directory | `os.path.join` ovunque, niente `/` o `\` letterali |
 | Rilevamento RAM | `sysctl` su macOS, `/proc/meminfo` su Linux, `ctypes.windll.kernel32.GlobalMemoryStatusEx` su Windows |
 | Rilevamento GPU | `nvidia-smi` (NVIDIA), `system_profiler` (Apple); fallback a CPU/RAM |
-| Bundle desktop | `create_app.sh` per `.app`, `create_app.ps1` per `.exe`; due percorsi separati che generano la stessa esperienza utente |
-| WebView | pywebview seleziona automaticamente WKWebView (Mac) o EdgeChromium (Win) o GTK/QtWebEngine (Linux) |
 | Encoding stdin/stdout subprocess | `encoding="utf-8", errors="replace"` per evitare crash con caratteri non-ASCII su Windows (default cp1252) |
+
+**Quello che NON è cross-platform**: il `launcher.py` desktop e le notifiche `/notify` in `app.py`. Sono macOS-only by design (osascript, path Homebrew, notifiche AppleScript) e non c'è stato tempo per fare il port.
 
 ---
 
@@ -531,7 +521,7 @@ L'overlap (60 caratteri) evita di perdere contesto ai bordi dei chunk: se una fr
 | Tutor personalizzato | system prompt specifico + fine-tuning |
 | RAG (risponde su documenti tuoi) | **già implementato** — usa `rag_index.py` per indicizzare |
 | App desktop nativa macOS | **già implementato** — `launcher.py` + `create_app.sh`; progetto in `~/RaxeusAI/` |
-| App desktop nativa Windows | **già implementato** — `launcher.py` + `create_app.ps1` (PyInstaller) |
+| App desktop nativa Windows | **non supportato in questa release** — codice macOS-only, port rimandato (vedi BUGS.md BUG-011) |
 | Anti-loop sull'agente | **già implementato** — `loop_guard.py` (idea da OpenJarvis) |
 | Hardware detect + auto modello | **già implementato** — `hardware.py` + comando `hardware` (idea da OpenJarvis) |
 | Diagnostica del sistema | **già implementato** — `doctor.py` + comando `doctor` (idea da OpenJarvis) |

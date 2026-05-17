@@ -34,9 +34,7 @@ RaxeusAI/
 │
 ├── launcher.py             → entry point desktop: avvia Flask in thread + finestra nativa pywebview
 ├── create_app.sh           → script una-tantum: crea RaxeusAI.app sul Desktop (icona + bundle macOS)
-├── create_app.ps1          → script Windows (PyInstaller) — ⚠️ NON FUNZIONANTE, vedi BUG-011
 ├── AppIcon.icns            → icona macOS generata da create_app.sh (non committare)
-├── AppIcon.ico             → icona Windows generata da create_app.ps1 (non committare)
 │
 ├── hardware.py             → rilevamento CPU/RAM/GPU + raccomandazione modello (idea da OpenJarvis)
 ├── loop_guard.py           → blocca loop degenerati nel tool calling (idea da OpenJarvis)
@@ -511,36 +509,6 @@ bash create_app.sh
 
 ---
 
-## create_app.ps1
-
-> ⚠️ **Non funzionante allo stato attuale.** Lo script genera l'eseguibile correttamente, ma `launcher.py` che viene bundlato usa codice macOS-only (`osascript`, path Homebrew, notifiche AppleScript): l'`.exe` crasha all'avvio. Vedi [BUG-011 in BUGS.md](BUGS.md). Da considerare placeholder finché non sarà fatto il port del launcher. Su Windows usare `python main.py`.
-
-Equivalente Windows di `create_app.sh`. Genera `RaxeusAI\RaxeusAI.exe` sul Desktop usando **PyInstaller**.
-
-**Fasi:**
-
-| Step | Operazione |
-|---|---|
-| 1 | Conversione `static/logo.png` → `AppIcon.ico` (multi-size: 16/32/48/64/128/256) con Pillow |
-| 2 | `pip install --quiet --upgrade pyinstaller pillow` nel venv |
-| 3 | Lancia PyInstaller con `--windowed`, `--icon AppIcon.ico`, `--add-data templates;templates`, `--add-data static;static` e gli `--hidden-import` (`openai`, `flask`, `webview`, `chromadb`, `pypdf`, `ddgs`, `googlesearch`, `yt_dlp`) |
-| 4 | Copia ricorsiva di `dist/RaxeusAI/` in `Desktop\RaxeusAI\` |
-
-**Uso:**
-```powershell
-cd $HOME\RaxeusAI
-powershell -ExecutionPolicy Bypass -File .\create_app.ps1
-```
-
-Lo script verifica la presenza di `venv\Scripts\python.exe` e si interrompe con istruzioni se manca. Pulisce `build\` e `dist\` a ogni esecuzione, quindi è sicuro rilanciarlo dopo modifiche.
-
-**Differenze rispetto a `create_app.sh`:**
-- Niente AppleScript/`sips`/`iconutil` — Pillow gestisce tutto cross-platform
-- Output è un `.exe` (con DLL accanto) invece di un bundle `.app`
-- Niente registrazione Launch Services — Windows non ne ha bisogno
-
----
-
 ## app.py
 
 Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, Memory]` con una `Memory` attiva per ogni conversazione aperta nel browser.
@@ -822,18 +790,16 @@ googlesearch-python
 requests
 beautifulsoup4
 pypdf
+python-docx
 flask
 chromadb
 pywebview
 yt-dlp
 openai-whisper
 pillow
-
-# Build tool desktop (solo Windows: usato da create_app.ps1)
-pyinstaller; platform_system == "Windows"
 ```
 
-Il marker `; platform_system == "Windows"` è una *environment marker* PEP 508: PyInstaller viene installato **solo su Windows**, mentre su macOS/Linux viene ignorato (il bundle Mac è generato da `create_app.sh`, che usa solo strumenti di sistema).
+Il bundle macOS è generato da `create_app.sh` con strumenti di sistema (`sips`, `iconutil`), quindi non serve PyInstaller (storicamente era nelle dipendenze condizionali per Windows — rimosso insieme a `create_app.ps1` quando il supporto Windows è stato dichiarato non funzionante).
 
 **Dipendenze originali:** `duckduckgo-search`, `googlesearch-python`, `requests`, `beautifulsoup4` per ricerca web e fetch pagine; `pypdf` per PDF; `flask` per la web UI.
 
@@ -920,20 +886,7 @@ source venv/bin/activate
 python launcher.py
 ```
 
-**Modalità desktop nativa (app Windows):**
-```powershell
-# Crea RaxeusAI\RaxeusAI.exe sul Desktop tramite PyInstaller:
-cd $HOME\RaxeusAI
-powershell -ExecutionPolicy Bypass -File .\create_app.ps1
-# Poi: doppio click su Desktop\RaxeusAI\RaxeusAI.exe
-
-# Avvio diretto senza exe:
-ollama serve
-.\venv\Scripts\activate
-python launcher.py
-```
-
-`create_app.ps1` genera l'icona `.ico` da `static/logo.png` con Pillow e poi invoca PyInstaller con `--windowed`, includendo `templates/` e `static/` come data, e dichiarando gli `--hidden-import` necessari (`openai`, `flask`, `webview`, `chromadb`, `pypdf`, `ddgs`, `googlesearch`, `yt_dlp`).
+> **Windows non supportato per la modalità desktop.** `create_app.ps1` è stato rimosso dalla repo. Su Windows è disponibile solo `python main.py` (CLI). Vedi [BUG-011 in BUGS.md](BUGS.md) per la roadmap del port.
 
 ---
 

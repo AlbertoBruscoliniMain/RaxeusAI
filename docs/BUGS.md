@@ -154,11 +154,11 @@ Storico dei bug risolti e problemi noti del progetto Raxeus.
 
 ---
 
-### BUG-011 — Chatbox e app desktop crashano su Windows
+### BUG-011 — Chatbox e app desktop solo macOS (codice Windows rimosso)
 
-**Stato:** 🔴 Aperto — blocca l'uso su Windows. Non risolto per mancanza di tempo nel ciclo di sviluppo corrente.
+**Stato:** ⚠️ Won't fix in questa release — supporto Windows rimosso dalla repo.
 
-**Sintomo:** Su Windows l'app desktop (bundle generato da `create_app.ps1` o lancio diretto di `python launcher.py`) crasha all'avvio o appena qualcosa va storto. La chatbox tramite browser (`python app.py` + apertura manuale di `http://localhost:5050`) parte ma alcuni endpoint backend chiamano `osascript` e falliscono.
+**Sintomo originale:** Su Windows l'app desktop (bundle generato da `create_app.ps1` o lancio diretto di `python launcher.py`) crashava all'avvio. La chatbox tramite browser (`python app.py` + apertura manuale di `http://localhost:5050`) partiva ma alcuni endpoint backend chiamavano `osascript` e fallivano.
 
 **Causa:** Tutto il codice cross-cutting aggiunto nelle ultime release è scritto per macOS:
 
@@ -170,17 +170,21 @@ Storico dei bug risolti e problemi noti del progetto Raxeus.
 | `app.py` | `_send_native_notification` lancia `osascript display notification` |
 | `create_app.sh` | bash + `sips` + `iconutil` — strumenti macOS |
 
-`create_app.ps1` esiste e genera un eseguibile via PyInstaller, ma il `launcher.py` bundlato è lo stesso codice macOS, quindi l'`.exe` crasha appena tenta di mostrare un dialog o cercare Ollama.
+**Decisione presa:** non avendo tempo per fare il port a Windows, e per evitare che lo script PowerShell desse l'impressione di un'app funzionante che invece crashava all'avvio, si è deciso di **rimuovere dalla repo tutto il codice dedicato a Windows**:
 
-**Workaround attuale:** su Windows usare solo la modalità CLI: `python main.py`. Funziona regolarmente.
+- Eliminato `create_app.ps1`
+- Rimossa la dipendenza condizionale `pyinstaller; platform_system == "Windows"` da `requirements.txt`
+- Rimosse dalle docs le sezioni che descrivevano l'app Windows come supportata
 
-**Fix da fare (port Windows):**
+**Stato per gli utenti Windows:** usare `python main.py` (CLI). La modalità terminale **funziona regolarmente** anche su Windows: nessuno dei moduli core (`agent.py`, `tools.py`, `memory.py`, `sessions.py`, ecc.) ha codice piattaforma-specifico.
+
+**Fix da fare in futuro per riabilitare Windows:**
 - `_show_error`: dispatcher su `platform.system()`; su Windows `Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show(...)` via `powershell -NoProfile -Command`
 - `_find_ollama_binary`: aggiungere `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` e `C:\Program Files\Ollama\ollama.exe`
 - `_start_ollama`: usare `creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS` su Windows
 - `_send_native_notification`: balloon tip via `System.Windows.Forms.NotifyIcon` o toast WinRT (Win10+)
 - Menu pywebview: testare che la callback funzioni anche con il chrome Win32 di pywebview (potrebbe servire Edge WebView2 invece del default)
-- `create_app.ps1`: invariato dal punto di vista dello script, ma da rigenerare dopo il port di `launcher.py`
+- Ricreare un `create_app.ps1` (o equivalente) solo dopo che il port di `launcher.py` è completato
 
 ---
 

@@ -27,7 +27,7 @@
 >
 > Due cose non sono ancora a posto e **non c'è stato tempo per fixarle in questa release**:
 >
-> 1. **La chatbox/app desktop gira solo su macOS.** Su Windows l'app crasha all'avvio (`launcher.py` usa codice macOS-only: `osascript`, path Homebrew, notifiche AppleScript). Vedi [docs/BUGS.md BUG-011](docs/BUGS.md). La modalità terminale (`python main.py`) funziona ovunque.
+> 1. **La chatbox/app desktop gira solo su macOS.** Il codice Windows è stato rimosso dalla repo perché non funzionante (`launcher.py` usa `osascript`, path Homebrew, notifiche AppleScript). Vedi [docs/BUGS.md BUG-011](docs/BUGS.md). La modalità terminale (`python main.py`) funziona ovunque.
 > 2. **L'invio di foto con testo richiede di installare manualmente `qwen2.5vl:3b`** (vedi sotto e [docs/BUGS.md BUG-009](docs/BUGS.md)) — il modello vision di default `llava` ha OCR insufficiente. Per allegare PDF/DOCX questo problema **non si pone**: vengono estratti server-side senza passare per il modello vision.
 
 ---
@@ -40,10 +40,10 @@ Il progetto supporta due modalità di utilizzo sullo stesso backend:
 
 | Modalità | Entry point | Interfaccia | Piattaforma |
 |---|---|---|---|
-| Terminale | `main.py` | CLI interattiva | macOS, Windows, Linux |
+| Terminale | `main.py` | CLI interattiva | macOS, Linux (funziona anche su Windows non testato) |
 | Web / app desktop | `app.py` o `launcher.py` | Browser via Flask + SSE oppure finestra nativa pywebview | **solo macOS** |
 
-> **⚠️ La chatbox (web UI + app desktop) gira solo su macOS.** Il `launcher.py` è scritto specificamente per macOS (auto-start Ollama via Homebrew, dialog `osascript`, notifiche AppleScript, menu pywebview testato solo su macOS). Su Windows **l'app crasha all'avvio** e `create_app.ps1` produce un eseguibile non funzionante. Non è stato possibile portare il codice per mancanza di tempo nel ciclo di sviluppo corrente — vedi [docs/BUGS.md BUG-011](docs/BUGS.md). La modalità terminale (`python main.py`) invece **funziona su qualsiasi sistema**.
+> **⚠️ La chatbox (web UI + app desktop) è supportata solo su macOS.** Il `launcher.py` è scritto specificamente per macOS (auto-start Ollama via Homebrew, dialog `osascript`, notifiche AppleScript, menu pywebview macOS). Il codice e i tool dedicati a Windows sono stati rimossi dalla repo perché non funzionanti e non c'è stato tempo di portarli — vedi [docs/BUGS.md BUG-011](docs/BUGS.md). Per usare l'agente su altri sistemi resta la modalità terminale (`python main.py`).
 
 ---
 
@@ -102,7 +102,6 @@ RaxeusAI/
 ├── app.py                  # Server Flask: endpoint REST e streaming SSE per la web UI
 ├── launcher.py             # Avvia Flask in thread daemon e apre finestra nativa
 ├── create_app.sh           # Script bash: genera il bundle RaxeusAI.app con icona per macOS
-├── create_app.ps1          # Script Windows (PyInstaller) — NON FUNZIONANTE, vedi BUGS.md
 ├── hardware.py             # Rilevamento CPU/RAM/GPU + raccomandazione modello Ollama
 ├── loop_guard.py           # Anti-loop sul tool calling: hash, ping-pong, budget
 ├── doctor.py               # Diagnostica del sistema: Python, Ollama, modelli, dipendenze
@@ -142,17 +141,8 @@ ollama pull qwen2.5vl:3b    # alternativa più leggera (~3GB)
 python -m venv venv
 ```
 
-macOS / Linux:
 ```bash
 source venv/bin/activate
-```
-
-Windows:
-```bat
-venv\Scripts\activate
-```
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -160,19 +150,11 @@ pip install -r requirements.txt
 
 ## Avvio
 
-**Interfaccia terminale:**
+**Interfaccia terminale (qualsiasi sistema):**
 
-macOS / Linux:
 ```bash
 ollama serve
-source venv/bin/activate
-python main.py
-```
-
-Windows:
-```bat
-ollama serve
-venv\Scripts\activate
+source venv/bin/activate    # su Windows: venv\Scripts\activate
 python main.py
 ```
 
@@ -184,8 +166,6 @@ source venv/bin/activate
 python app.py
 # apri http://localhost:5050
 ```
-
-> Su Windows il server Flask parte ma il `launcher.py` (che apre la finestra nativa) crasha; il browser puro potrebbe funzionare per testing ma non è una via supportata.
 
 ### Comandi disponibili nel terminale
 
@@ -236,9 +216,9 @@ rm -rf ~/Desktop/RaxeusAI.app   # rimuove il bundle
 bash create_app.sh              # ricrea da zero
 ```
 
-### Stato Windows
+### Su Windows
 
-`create_app.ps1` esiste nella repo ma **non produce un'app funzionante**: il `launcher.py` che viene bundlato usa API specifiche macOS (`osascript`, path `/opt/homebrew`, notifiche AppleScript) e crasha all'avvio su Windows. Lo script PowerShell e l'`.exe` generato vanno considerati **placeholder** finché non sarà fatto il port — vedi [docs/BUGS.md BUG-011](docs/BUGS.md) per la lista di cosa portare. Su Windows usa `python main.py` (CLI), che funziona regolarmente.
+Il bundler `create_app.ps1` è stato rimosso dalla repo perché non funzionante: il `launcher.py` usa codice macOS-only (`osascript`, path Homebrew, notifiche AppleScript) e l'`.exe` generato crashava all'avvio. Su Windows è disponibile solo `python main.py` (CLI), che funziona regolarmente. Vedi [docs/BUGS.md BUG-011](docs/BUGS.md) per la roadmap del port.
 
 ---
 

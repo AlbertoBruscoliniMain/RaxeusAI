@@ -83,7 +83,7 @@ L'applicazione è **single-user** e non prevede autenticazione né registrazione
 | RF-12 | Caricamento di fino a 3 immagini per messaggio; il modello vision le analizza e risponde anche in assenza di testo. |
 | RF-13 | Modulo RaxeusLyric: ricerca canzone (iTunes API), recupero testo ufficiale (lyrics.ovh), download audio (yt-dlp + FFmpeg), trascrizione con timestamp per parola (faster-Whisper), forced alignment testo-audio (programmazione dinamica), visualizzazione karaoke sincronizzata, cache locale LRC + mp3. |
 | RF-14 | App desktop nativa su macOS tramite pywebview + bundle `.app` generato da `create_app.sh`. |
-| RF-15 | App desktop nativa su Windows tramite pywebview + PyInstaller, eseguibile `.exe` generato da `create_app.ps1`. |
+| RF-15 | *(rimosso)* — App desktop su Windows non supportata in questa release: il codice cross-cutting (`launcher.py`, notifiche, auto-start Ollama) è macOS-only. Su Windows resta disponibile la sola modalità CLI (`python main.py`). Vedi [docs/BUGS.md BUG-011](docs/BUGS.md). |
 | RF-16 | Rilevamento hardware (CPU, RAM, GPU) e raccomandazione automatica del modello Qwen3 più adatto. |
 | RF-17 | Comando `doctor`: diagnostica completa di versione Python, raggiungibilità Ollama, modelli e dipendenze, con report a checklist `✓` / `!` / `✗`. |
 | RF-18 | Interfaccia terminale con comandi `reset`, `salva`, `sessioni`, `carica <N>`, `doctor`, `hardware`, `esci`. |

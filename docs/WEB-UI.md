@@ -1,6 +1,6 @@
 # Chatbox — Guida completa all'interfaccia
 
-> **Stato: BETA — solo macOS.** La chatbox e l'app desktop **girano esclusivamente su macOS**. Su Windows l'app crasha all'avvio perché `launcher.py` usa codice macOS-specifico (`osascript`, path Homebrew, notifiche AppleScript, dialog nativi). Non è stato possibile portarla a Windows per mancanza di tempo nel ciclo di sviluppo corrente — vedi [BUG-011](BUGS.md). Su Windows è disponibile solo la modalità terminale (`python main.py`).
+> **Stato: BETA — solo macOS.** La chatbox e l'app desktop **girano esclusivamente su macOS**: `launcher.py` usa codice macOS-specifico (`osascript`, path Homebrew, notifiche AppleScript, dialog nativi). Il bundler Windows è stato rimosso dalla repo perché non funzionante — vedi [BUG-011](BUGS.md). Su Windows è disponibile solo la modalità terminale (`python main.py`).
 >
 > Anche su macOS alcune feature sono ancora in stabilizzazione. Vedi "[Limiti noti](#limiti-noti--cose-da-fixare)" in fondo prima di segnalare bug.
 >
@@ -302,7 +302,7 @@ Le immagini allegate non vengono salvate in `localStorage` (occuperebbero MB). Q
 
 Se hai >5 chat sul disco, l'interfaccia ne mostra solo 5. Le altre restano salvate ma non sono raggiungibili senza usare il CLI (`python main.py` → `sessioni` / `carica N`).
 
-### 🔴 Chatbox solo su macOS — Windows crasha
+### 🔴 Chatbox solo su macOS
 
 `launcher.py` è scritto in modo specifico per macOS:
 - chiama `osascript` per dialog ed notifiche native
@@ -310,7 +310,7 @@ Se hai >5 chat sul disco, l'interfaccia ne mostra solo 5. Le altre restano salva
 - usa `start_new_session=True` su `Popen` (concetto POSIX, niente equivalente diretto su Windows)
 - il menu pywebview è testato solo sulla menu bar macOS
 
-Su Windows il bundle generato da `create_app.ps1` **non si avvia**: il `_show_error` AppleScript crasha appena entra il flusso di errore, e l'auto-start Ollama fallisce silenziosamente perché cerca path Unix. **Non c'è stato tempo per fare il port** in questa release. Su Windows è disponibile solo `python main.py` (CLI), che funziona regolarmente. Roadmap del port in [BUG-011](BUGS.md).
+Lo script bundler `create_app.ps1` è stato **rimosso dalla repo** perché produceva un eseguibile che crashava all'avvio (vedi sopra: il `launcher.py` bundlato non funzionava su Windows). Non c'è stato tempo per fare il port in questa release. Su Windows è disponibile solo `python main.py` (CLI), che funziona regolarmente. Roadmap del port in [BUG-011](BUGS.md).
 
 ### 🟡 Run_python con Python di sistema
 
