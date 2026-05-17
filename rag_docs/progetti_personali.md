@@ -56,8 +56,8 @@ python main.py
 ollama serve
 source venv/bin/activate
 python app.py
-# → http://localhost:5000
-# → http://localhost:5000/lyric (RaxeusLyric)
+# → http://localhost:5050
+# → http://localhost:5050/lyric (RaxeusLyric)
 ```
 
 ### Dipendenze principali

@@ -34,7 +34,7 @@ RaxeusAI/
 │
 ├── launcher.py             → entry point desktop: avvia Flask in thread + finestra nativa pywebview
 ├── create_app.sh           → script una-tantum: crea RaxeusAI.app sul Desktop (icona + bundle macOS)
-├── create_app.ps1          → script una-tantum: crea RaxeusAI.exe sul Desktop (PyInstaller, Windows)
+├── create_app.ps1          → script Windows (PyInstaller) — ⚠️ NON FUNZIONANTE, vedi BUG-011
 ├── AppIcon.icns            → icona macOS generata da create_app.sh (non committare)
 ├── AppIcon.ico             → icona Windows generata da create_app.ps1 (non committare)
 │
@@ -172,9 +172,29 @@ Viene chiamata da `app.py` e i dizionari vengono serializzati come eventi SSE in
 
 **Flusso con immagini (`images` non None):**
 1. Costruisce un messaggio multimodale OpenAI-format: `content = [{"type": "text", ...}, {"type": "image_url", "image_url": {"url": "data:image/...;base64,..."}}]`
-2. Appende il messaggio alla history esistente (senza modificare `mem`) e chiama `VISION_MODEL` — senza tool schemas (la maggior parte dei modelli vision non li supporta)
-3. Yielda i token normalmente
-4. Salva in `mem` la versione **testo-only** del messaggio utente (`[N immagini allegate]` + eventuale testo) — così i turni successivi continuano con `MODEL` senza storia multimodale incompatibile
+2. Se `user_input` è vuoto, usa un prompt OCR esplicito (chiede trascrizione parola-per-parola)
+3. Risolve il modello vision con `_resolve_vision_model()` (vedi sotto)
+4. Se il modello risolto è in `weak_ocr = {"llava", "llava:latest", ..., "moondream", "moondream:latest"}`, yielda un token di hint che invita ad installare `qwen2.5vl:3b`
+5. Appende il messaggio alla history esistente (senza modificare `mem`) e chiama il vision model — senza tool schemas (la maggior parte dei modelli vision non li supporta)
+6. Yielda i token normalmente
+7. Salva in `mem` la versione **testo-only** del messaggio utente (`[N immagini allegate]` + eventuale testo) — così i turni successivi continuano con `MODEL` senza storia multimodale incompatibile
+
+**`_resolve_vision_model()`:** interroga `/api/tags` di Ollama per scoprire i modelli installati, sceglie `VISION_MODEL` se presente, altrimenti il primo dei `VISION_FALLBACKS` disponibile. Cachato in `_resolved_vision_model` dopo la prima chiamata.
+
+**System prompt vision aggressivo:** invece del classico "descrivi cosa vedi", il prompt vision è scritto come "Sei un OCR + analista visivo. La tua priorità assoluta è LEGGERE il testo… Non dire mai 'il documento non è completo' senza prima aver provato a trascrivere ciò che vedi: se una parola è incerta, mettila tra `[parentesi quadre]`". Questo evita che modelli vision deboli si rifiutino di leggere documenti densi.
+
+### Pulsante Stop + gestione GeneratorExit
+
+Quando l'utente clicca il pulsante stop in UI, il browser chiama `AbortController.abort()` sulla `fetch` SSE. Lato server:
+
+1. Il prossimo `yield` del generator solleva `GeneratorExit`
+2. In `chat_stream`, il blocco `try/except GeneratorExit` cattura l'eccezione, chiama `stream.close()` sull'HTTP stream verso Ollama (fondamentale: senza questo il modello continua a generare token in background per minuti), e salva la risposta parziale in `mem` con marker `[interrotto]`
+3. Re-solleva `GeneratorExit` per il cleanup del generator
+4. Anche il `finally:` chiude lo stream nel caso normale (rete OK, modello completato senza tool call)
+
+Stesso pattern è applicato al blocco vision (con un `_queue.Queue` invece del for loop diretto perché la chiamata vision gira in un worker thread per poter yieldare keepalive ogni 10s).
+
+**Note:** se l'utente cancella *prima* che inizi a uscire testo, il frontend mostra `[interrotto prima della risposta]` perché `aiBubble` non è ancora stato creato.
 
 ---
 
@@ -200,6 +220,38 @@ Definisce le funzioni che Raxeus può eseguire autonomamente. Ogni tool ha:
 | `run_python` | `run_python(code)` | Esegue codice Python in subprocess, restituisce stdout/stderr (timeout 10s) |
 | `get_datetime` | `get_datetime()` | Restituisce data e ora corrente formattata |
 | `rag_search` | `rag_search(query, n_results)` | Cerca nei documenti personali indicizzati (ChromaDB). Restituisce i chunk più rilevanti con fonte |
+
+### Lazy imports (cold-start)
+
+Tutti gli import "pesanti" sono **caricati alla prima chiamata della funzione che li usa**, non a import-time del modulo. Cold-start di `tools.py` ridotto da **~436 ms → ~10 ms** (misurato con `python -X importtime`).
+
+```python
+def _lazy(name, importer):
+    if name in _LAZY_CACHE:
+        return _LAZY_CACHE[name]
+    try:
+        mod = importer()
+    except ImportError:
+        mod = None
+    _LAZY_CACHE[name] = mod
+    return mod
+
+def _lazy_chromadb():
+    def _imp():
+        import chromadb
+        from config import RAG_DB_PATH
+        return (chromadb, RAG_DB_PATH)
+    return _lazy("chromadb", _imp)
+
+# idem _lazy_ddgs, _lazy_gsearch, _lazy_requests, _lazy_pypdf, _lazy_docx
+```
+
+Le funzioni `web_search`, `google_search`, `fetch_url`, `wikipedia_search`, `rag_search`, `_read_pdf`, `_read_docx` chiamano l'helper lazy invece di assumere il modulo importato.
+
+**Effetti visibili:**
+- L'app desktop apre la finestra ~400 ms prima
+- Se il modello non chiama mai `rag_search`, ChromaDB (~300 ms di import) non viene mai caricato
+- I `_lazy_*()` ritornano `None` se l'ImportError persiste, e le funzioni rispondono con un messaggio chiaro
 
 ### Struttura di ogni tool schema
 
@@ -374,22 +426,33 @@ Richiesta a `https://itunes.apple.com/search` con `entity=song&limit=1`. La cope
 Entry point per la modalità **app desktop nativa**. Avvia Flask in un thread background e apre l'interfaccia in una finestra WebKit nativa tramite `pywebview` — nessun browser, nessuna barra URL.
 
 ```python
-def _find_free_port() -> int: ...       # sceglie una porta TCP libera a runtime
-def _start_flask(port: int) -> None:    # gira in thread daemon
-def _wait_for_flask(url, retries, delay) -> bool:  # polling finché Flask è pronto
+def _ollama_is_up(timeout: float) -> bool: ...   # TCP probe su 127.0.0.1:11434
+def _find_ollama_binary() -> str | None: ...      # PATH + Homebrew + /Applications/Ollama.app
+def _start_ollama() -> bool: ...                  # Popen + polling 20s
+def _ensure_ollama() -> bool: ...                 # check → start → dialog d'errore
+def _show_error(message: str) -> None: ...        # osascript display dialog
+def _find_free_port() -> int: ...                 # sceglie una porta TCP libera a runtime
+def _start_flask(port: int) -> None: ...          # gira in thread daemon
+def _wait_for_flask(url, retries, delay) -> bool: # polling finché Flask è pronto
+def _load_window_state() -> dict: ...             # legge sessions/_window_state.json
+def _save_window_state(window) -> None: ...       # scrive width/height/x/y alla chiusura
 ```
 
-**Flusso di avvio:**
+**Flusso di avvio aggiornato:**
 1. `logging.getLogger("werkzeug").setLevel(logging.ERROR)` — sopprime il banner Werkzeug prima di qualsiasi import Flask
 2. `_HERE = os.path.dirname(os.path.abspath(__file__))` + `os.chdir(_HERE)` — garantisce che i path relativi di Flask (templates, static, sessions) funzionino da qualsiasi cwd; `sys.path.insert(0, _HERE)` rende importabile `app.py`
-3. `_find_free_port()` — ottiene una porta TCP libera su `127.0.0.1` (nessun conflitto anche con più istanze)
-4. Flask parte in un `threading.Thread` con `daemon=True` — viene ucciso automaticamente alla chiusura della finestra
-5. `_wait_for_flask()` — polling con `urllib.request.urlopen` ogni 0.15s (max 40 tentativi = 6s timeout)
-6. `webview.create_window()` + `webview.start()` — apre la finestra nativa e avvia il run loop (bloccante)
+3. **`_ensure_ollama()`** — controlla che la porta 11434 risponda. Se non risponde, cerca il binario `ollama` (PATH → `/opt/homebrew/bin` → `/usr/local/bin` → `/Applications/Ollama.app/Contents/Resources/ollama`) e lo lancia in background con `subprocess.Popen([binary, "serve"], start_new_session=True)`. Polling 20s. Se non lo trova, mostra un dialog nativo `osascript` e chiude.
+4. `_find_free_port()` — ottiene una porta TCP libera su `127.0.0.1` (nessun conflitto anche con più istanze)
+5. Flask parte in un `threading.Thread` con `daemon=True`
+6. `_wait_for_flask()` — polling con `urllib.request.urlopen` ogni 0.15s (max 40 tentativi = 6s timeout)
+7. **`_load_window_state()`** — legge `sessions/_window_state.json` se esiste (width/height/x/y); fallback a 1280×820
+8. `webview.create_window(**state)` — apre la finestra alla dimensione/posizione salvata
+9. `window.events.closing += lambda: _save_window_state(window)` — al prossimo avvio la finestra riapre dove l'avevi lasciata
+10. **Menu nativo**: `webview.start(menu=[...])` con `Menu("File", [...])` e `Menu("Info", [...])`. Le voci richiamano i bottoni HTML via `window.evaluate_js("document.getElementById('btn-xxx').click()")`
 
 **Dettagli tecnici:**
 - `debug=False` e `use_reloader=False` su Flask — obbligatori in modalità thread (il reloader fork il processo e rompe il run loop)
-- La finestra parte 1280×820 con `min_size=(800, 600)`, `text_select=True` (testo selezionabile come in un browser)
+- Avvio Ollama: `start_new_session=True` distacca il processo figlio dal session leader dell'app, così Ollama sopravvive se l'app crasha (ed è anche il comportamento desiderato — l'utente potrebbe avere altre app che lo usano)
 - Il progetto deve trovarsi **fuori dalle cartelle protette da macOS TCC** (Desktop, Documents, Downloads) — vedi THEORY.md sezione TCC
 
 **Avvio diretto (senza .app):**
@@ -450,6 +513,8 @@ bash create_app.sh
 
 ## create_app.ps1
 
+> ⚠️ **Non funzionante allo stato attuale.** Lo script genera l'eseguibile correttamente, ma `launcher.py` che viene bundlato usa codice macOS-only (`osascript`, path Homebrew, notifiche AppleScript): l'`.exe` crasha all'avvio. Vedi [BUG-011 in BUGS.md](BUGS.md). Da considerare placeholder finché non sarà fatto il port del launcher. Su Windows usare `python main.py`.
+
 Equivalente Windows di `create_app.sh`. Genera `RaxeusAI\RaxeusAI.exe` sul Desktop usando **PyInstaller**.
 
 **Fasi:**
@@ -494,6 +559,17 @@ Server Flask che espone la web UI. Mantiene un dizionario `_sessions: dict[str, 
 
 **`_get_memory(session_id)`:** recupera la Memory dal dizionario; se non esiste la crea, e se esiste un file sessione corrispondente lo carica automaticamente da disco.
 
+### Endpoint aggiunti per app desktop
+
+| Metodo | Path | Descrizione |
+|---|---|---|
+| `POST` | `/extract` | Riceve un file multipart (PDF/DOCX/testo, max 10MB), estrae il testo via `_read_pdf`/`_read_docx`/`_read_plain` di `tools.py` e lo restituisce come JSON `{name, text}`. Usato dal frontend per allegare documenti senza passare per il modello vision. |
+| `POST` | `/notify` | Riceve `{title, message}`, lancia una notifica nativa macOS via `osascript display notification` in un thread. Il frontend lo chiama solo quando la finestra non è in primo piano e la risposta ha richiesto >4s. |
+
+**Helper `_send_native_notification(title, message)`:** wrapper che esegue `osascript` in subprocess. Fa escape di `"` e `\\` nel testo per evitare injection nello script AppleScript. Limita title a 80 char e message a 400.
+
+**Estensioni accettate da `/extract`:** `_ALLOWED_DOC_EXTS = {".pdf", ".docx"} | _TEXT_EXTS` dove `_TEXT_EXTS` è la lista già definita in `tools.py` (`.txt .md .csv .json .html .py .js .ts` ecc.). Files con estensione fuori da questo set vengono rifiutati con 400.
+
 ### Endpoint RaxeusLyric (aggiunti)
 
 | Metodo | Path | Descrizione |
@@ -533,8 +609,8 @@ _LYRIC_COVERS = _LYRIC_OUT  / "covers"            # copertine
 ```bash
 source venv/bin/activate
 python app.py
-# chat AI:    http://localhost:5000
-# RaxeusLyric: http://localhost:5000/lyric
+# chat AI:    http://localhost:5050
+# RaxeusLyric: http://localhost:5050/lyric
 ```
 
 ---
@@ -627,6 +703,52 @@ Tutta la logica del frontend. Nessuna dipendenza esterna.
 - `sendMessage` — raccoglie `selectedImages`, li svuota prima dell'invio, salva in localStorage solo il testo (o placeholder `[N immagini allegate]`), costruisce la bolla con le immagini reali, include `images: imagesToSend.map(i => i.dataUrl)` nel payload JSON verso `/chat`
 
 **Nota localStorage:** le immagini non vengono salvate in localStorage (peso eccessivo). Al ricaricamento della pagina le bolle con immagini mostrano solo il testo placeholder; le immagini rimangono visibili solo durante la sessione corrente.
+
+### Allegati documento (PDF / DOCX / testo)
+
+In aggiunta alle immagini, l'input file accetta documenti. Gestione completamente diversa:
+
+| Stato | Variabile JS | Tipo |
+|---|---|---|
+| Immagini selezionate | `selectedImages` | `[{file, dataUrl}]` — base64 nel browser |
+| Documenti estratti | `selectedDocs` | `[{name, text, chars, loading}]` — già processati server-side |
+
+**Flusso documento:**
+1. `dispatchFiles(files)` divide la selezione tra immagini (`f.type.startsWith('image/')`) e documenti (regex su estensione)
+2. Per ogni doc, `addDocFile(file)` aggiunge un placeholder `{loading: true}` a `selectedDocs`, mostra la chip "estrazione…", poi fa `POST /extract` con `FormData`
+3. La risposta `{name, text}` aggiorna il placeholder con il testo estratto e `chars = text.length`
+4. La chip mostra "📄 nome · N caratteri"
+5. Al `sendMessage`, **non è possibile inviare se almeno un doc è ancora `loading`** (l'invio aspetta che tutte le estrazioni siano completate)
+6. Il testo dei docs viene **prefisso** al prompt utente come blocchi `--- Documento allegato: X ---\n<contenuto>`
+7. In `localStorage` si salva solo `userText + [doc: name]`, **mai** il contenuto estratto (sarebbe potenzialmente megabyte)
+
+**Estensioni accettate (vedi `DOC_EXT_RE` e attributo `accept` del file input):**
+`pdf, docx, txt, md, csv, json, html, xml, log, py, js, ts, tsx, jsx, css, scss, yaml, yml, toml, ini, sh, bash, zsh, sql`
+
+**Limiti:**
+- max 3 documenti per messaggio (`MAX_DOCS = 3`)
+- max 10 MB per file (`MAX_DOC_BYTES`); enforcement sia client che server
+- niente paste documenti da clipboard (paste documenti via clipboard è raro e non tutti i browser lo supportano)
+
+### Pulsante Stop
+
+| Stato | Etichetta | Classe CSS | Click |
+|---|---|---|---|
+| Idle | `invia` | (nessuna) | `sendMessage()` |
+| Streaming | `stop` | `.is-stop` (rosso) | `stopStream()` → `AbortController.abort()` |
+
+`setStreamingUI(streaming)` toggla classe e testo. `currentAbortController` è una variabile globale resettata a ogni invio. Lato server il `GeneratorExit` chiude lo stream Ollama (vedi sezione `chat_stream` in [agent.py](#agentpy)).
+
+In caso di `AbortError`, `sendMessage` non rilancia: aggiunge `_[interrotto]_` in markdown alla bolla AI parziale e salva quanto ricevuto.
+
+### Notifiche
+
+`maybeNotify(content)` viene chiamata al ricevere `done` dal server. Skippa se:
+- `document.visibilityState === 'visible' && document.hasFocus()`
+- elapsed < 4000 ms dall'invio
+- il contenuto è vuoto
+
+Altrimenti `POST /notify` con `{title: "Raxeus ha risposto", message: preview.slice(0, 140)}`.
 
 **Elementi aggiunti:**
 - `btnInfo`, `infoOverlay`, `infoClose` — DOM refs per il modal info
@@ -777,7 +899,7 @@ python main.py
 ollama serve
 source venv/bin/activate
 python app.py
-# apri http://localhost:5000
+# apri http://localhost:5050
 ```
 
 **Modalità desktop nativa (app macOS):**

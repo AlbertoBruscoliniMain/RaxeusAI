@@ -480,8 +480,8 @@ RaxeusLyric non ha un entry point separato — è integrato in `app.py`:
 ollama serve
 source venv/bin/activate
 python app.py
-# chat:         http://localhost:5000
-# RaxeusLyric:  http://localhost:5000/lyric
+# chat:         http://localhost:5050
+# RaxeusLyric:  http://localhost:5050/lyric
 ```
 
 Oppure tramite l'app desktop (`launcher.py` / `RaxeusAI.app`) — in quel caso entrambe le pagine sono accessibili dalla stessa finestra pywebview.

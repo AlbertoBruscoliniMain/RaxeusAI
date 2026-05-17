@@ -173,16 +173,27 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
     if images:
         yield {"type": "thinking"}
 
-        content = [{"type": "text", "text": user_input or "Descrivi queste immagini."}]
+        # Quando l'utente non scrive nulla, chiediamo esplicitamente un OCR
+        # completo: i modelli vision (specialmente llava/moondream) tendono
+        # altrimenti a "descrivere" il documento invece di trascriverlo.
+        default_ask = (
+            "Trascrivi PAROLA PER PAROLA tutto il testo visibile nell'immagine, "
+            "rispettando la struttura (titoli, paragrafi, elenchi). Poi, se utile, "
+            "riassumi brevemente di cosa parla."
+        )
+        user_text = user_input or default_ask
+        content = [{"type": "text", "text": user_text}]
         for img_b64 in images:
             content.append({"type": "image_url", "image_url": {"url": img_b64}})
 
         vision_system = (
-            "Sei un assistente di analisi visiva. Osserva attentamente le immagini "
-            "fornite e rispondi in italiano basandoti SOLO su ciò che vedi davvero. "
-            "Se l'immagine contiene testo, leggilo letteralmente prima di interpretare. "
-            "Non inventare dettagli non presenti. Non assumere personalità o tono: "
-            "rispondi in modo diretto, fattuale e concreto."
+            "Sei un OCR + analista visivo. La tua priorità assoluta è LEGGERE il testo "
+            "presente nelle immagini, parola per parola, anche se il documento è denso, "
+            "stampato o leggermente sfocato. Non dire mai 'il documento non è completo' "
+            "o 'non riesco a leggere' senza prima aver provato a trascrivere ciò che vedi: "
+            "se una parola è incerta, mettila tra [parentesi quadre]. "
+            "Rispondi in italiano, in modo diretto e fattuale, basandoti SOLO su ciò che "
+            "vedi davvero. Non inventare dettagli, non assumere personalità."
         )
         # Il modello vision non accetta tool_calls nello storico: prendiamo solo
         # i messaggi con contenuto testuale puro per dargli un minimo di contesto.
@@ -206,6 +217,19 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
         # `thinking` ogni 10s per tenere viva la connessione SSE (WKWebView
         # chiude le richieste senza dati dopo ~60s).
         vision_model = _resolve_vision_model()
+
+        # Modelli con OCR notoriamente debole: avvertiamo l'utente PRIMA
+        # della risposta cosi' sa perche' il risultato puo' essere scarso.
+        weak_ocr = {"llava", "llava:latest", "llava:7b", "llava:13b",
+                    "moondream", "moondream:latest"}
+        if vision_model.lower() in weak_ocr:
+            hint = (
+                f"_⚠️ Sto usando `{vision_model}`, che ha OCR debole. "
+                "Per leggere bene testo nei documenti installa un modello migliore:_\n"
+                "```\nollama pull qwen2.5vl:3b\n```\n"
+                "_(Riavvia poi l'app — verrà rilevato automaticamente.)_\n\n"
+            )
+            yield {"type": "token", "content": hint}
         q = _queue.Queue()
         def _vision_worker():
             try:
@@ -222,34 +246,44 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
         threading.Thread(target=_vision_worker, daemon=True).start()
 
         full_content = ""
-        while True:
-            try:
-                kind, value = q.get(timeout=10)
-            except _queue.Empty:
-                yield {"type": "thinking"}
-                continue
-            if kind == "error":
-                err_str = str(value)
-                if "not found" in err_str.lower() or "404" in err_str:
-                    msg = (
-                        f"❌ Nessun modello vision disponibile in Ollama.\n\n"
-                        f"Installane uno con uno di questi comandi:\n"
-                        f"```\nollama pull {VISION_MODEL}\nollama pull llava\nollama pull moondream\n```"
-                    )
-                else:
-                    msg = f"❌ Errore con il modello vision ({vision_model}): {err_str}"
-                yield {"type": "token", "content": msg}
-                full_content = msg
-                break
-            if kind == "done":
-                break
-            chunk = value
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            if delta.content:
-                full_content += delta.content
-                yield {"type": "token", "content": delta.content}
+        aborted = False
+        try:
+            while True:
+                try:
+                    kind, value = q.get(timeout=10)
+                except _queue.Empty:
+                    yield {"type": "thinking"}
+                    continue
+                if kind == "error":
+                    err_str = str(value)
+                    if "not found" in err_str.lower() or "404" in err_str:
+                        msg = (
+                            f"❌ Nessun modello vision disponibile in Ollama.\n\n"
+                            f"Installane uno con uno di questi comandi:\n"
+                            f"```\nollama pull {VISION_MODEL}\nollama pull llava\nollama pull moondream\n```"
+                        )
+                    else:
+                        msg = f"❌ Errore con il modello vision ({vision_model}): {err_str}"
+                    yield {"type": "token", "content": msg}
+                    full_content = msg
+                    break
+                if kind == "done":
+                    break
+                chunk = value
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    full_content += delta.content
+                    yield {"type": "token", "content": delta.content}
+        except GeneratorExit:
+            aborted = True
+            n = len(images)
+            img_note = f"[{n} {'immagine allegata' if n == 1 else 'immagini allegate'}]"
+            mem.add("user", f"{img_note}\n{user_input}" if user_input else img_note)
+            if full_content:
+                mem.add("assistant", full_content + "\n\n[interrotto]")
+            raise
 
         n = len(images)
         img_note = f"[{n} {'immagine allegata' if n == 1 else 'immagini allegate'}]"
@@ -261,38 +295,96 @@ def chat_stream(user_input: str, mem: Memory, images: list | None = None):
     mem.add("user", user_input)
 
     while True:
-        stream = client.chat.completions.create(
-            model=MODEL,
-            messages=mem.get(),
-            tools=TOOL_SCHEMAS,
-            tool_choice="auto",
-            stream=True,
-        )
+        try:
+            stream = client.chat.completions.create(
+                model=MODEL,
+                messages=mem.get(),
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
+                stream=True,
+            )
+        except Exception as e:
+            err_str = str(e)
+            if "connection" in err_str.lower() or "refused" in err_str.lower():
+                msg = (
+                    "❌ Impossibile contattare Ollama su "
+                    f"`{OLLAMA_URL}`. Avvialo con `ollama serve` "
+                    "(o apri l'app Ollama) e riprova."
+                )
+            elif "not found" in err_str.lower() or "404" in err_str:
+                msg = (
+                    f"❌ Modello `{MODEL}` non disponibile in Ollama.\n\n"
+                    f"Installalo con: `ollama pull {MODEL}`"
+                )
+            else:
+                msg = f"❌ Errore Ollama: {err_str}"
+            yield {"type": "token", "content": msg}
+            mem.add("assistant", msg)
+            yield {"type": "done"}
+            return
 
         full_content = ""
         tool_calls_acc = {}
 
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
+        try:
+            chunks_iter = iter(stream)
+        except Exception as e:
+            msg = f"❌ Errore Ollama: {e}"
+            yield {"type": "token", "content": msg}
+            mem.add("assistant", msg)
+            yield {"type": "done"}
+            return
 
-            if delta.content:
-                full_content += delta.content
-                yield {"type": "token", "content": delta.content}
+        aborted = False
+        try:
+            while True:
+                try:
+                    chunk = next(chunks_iter)
+                except StopIteration:
+                    break
+                except Exception as e:
+                    msg = f"\n\n❌ Connessione interrotta con Ollama: {e}"
+                    yield {"type": "token", "content": msg}
+                    full_content += msg
+                    break
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
 
-            if delta.tool_calls:
-                yield {"type": "thinking"}
-                for tc in delta.tool_calls:
-                    i = tc.index
-                    if i not in tool_calls_acc:
-                        tool_calls_acc[i] = {"id": "", "name": "", "arguments": ""}
-                    if tc.id:
-                        tool_calls_acc[i]["id"] = tc.id
-                    if tc.function and tc.function.name:
-                        tool_calls_acc[i]["name"] = tc.function.name
-                    if tc.function and tc.function.arguments:
-                        tool_calls_acc[i]["arguments"] += tc.function.arguments
+                if delta.content:
+                    full_content += delta.content
+                    yield {"type": "token", "content": delta.content}
+
+                if delta.tool_calls:
+                    yield {"type": "thinking"}
+                    for tc in delta.tool_calls:
+                        i = tc.index
+                        if i not in tool_calls_acc:
+                            tool_calls_acc[i] = {"id": "", "name": "", "arguments": ""}
+                        if tc.id:
+                            tool_calls_acc[i]["id"] = tc.id
+                        if tc.function and tc.function.name:
+                            tool_calls_acc[i]["name"] = tc.function.name
+                        if tc.function and tc.function.arguments:
+                            tool_calls_acc[i]["arguments"] += tc.function.arguments
+        except GeneratorExit:
+            # Client disconnesso (pulsante stop o tab chiusa): chiudiamo lo
+            # stream HTTP verso Ollama per non lasciare la chiamata appesa,
+            # salviamo quanto già generato e ri-solleviamo per cleanup.
+            aborted = True
+            try:
+                stream.close()
+            except Exception:
+                pass
+            if full_content:
+                mem.add("assistant", full_content + "\n\n[interrotto]")
+            raise
+        finally:
+            if not aborted:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
 
         if tool_calls_acc:
             tool_calls_list = [

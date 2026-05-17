@@ -66,6 +66,52 @@ Storico dei bug risolti e problemi noti del progetto Raxeus.
 
 ---
 
+### BUG-008 — Chatbox: spinner infinito quando Ollama è giù
+
+**Stato:** ✅ Risolto
+
+**Sintomo:** ogni prompt inviato dalla web UI lasciava lo spinner "elaborazione…" girare all'infinito senza alcun messaggio d'errore in chat. Si riproduceva al 100% lanciando l'app desktop senza avere Ollama in esecuzione.
+
+**Causa:** in `chat_stream` di `agent.py`, la chiamata `client.chat.completions.create(stream=True)` sollevava un `ConnectionError` (porta 11434 rifiutata) **non catturato**. L'eccezione terminava il generator SSE; il browser riceveva solo l'evento iniziale `session_id` e non vedeva mai il `done`. Il listener `for await reader.read()` continuava ad aspettare dati che non sarebbero mai arrivati.
+
+**Fix applicati:**
+1. `try/except` attorno a `client.chat.completions.create(...)` in `chat_stream`: l'eccezione produce un `token` con messaggio chiaro (`❌ Impossibile contattare Ollama su 127.0.0.1:11434…`) e un `done`
+2. Diagnosi specifica per errori comuni: connessione rifiutata, modello non installato (`ollama pull qwen3:8b`), altri errori generici
+3. Loop di chunk wrappato in try che cattura anche eccezioni mid-stream e le notifica come errore in chat
+4. `launcher.py` ora **avvia automaticamente Ollama** se la porta 11434 non risponde: cerca il binario in PATH/Homebrew/`/Applications/Ollama.app` e lo lancia con `subprocess.Popen([binary, "serve"], start_new_session=True)`. Se non lo trova, mostra un dialog `osascript` che invita a installarlo
+
+---
+
+### BUG-009 — Foto di documenti illeggibili dal modello vision
+
+**Stato:** ⚠️ Mitigato — fix vero ancora da fare (BETA)
+
+**Sintomo:** Allegando la foto di un documento (es. screenshot di un PDF), il modello rispondeva *"il documento non è completo, non riesco a leggere i contenuti"* anche con testo perfettamente leggibile.
+
+**Causa:** L'unico modello vision installato di default sulla macchina di test era `llava:latest`. LLaVA ha capacità OCR molto deboli — vede che c'è del testo ma non lo trascrive. Lo stesso vale per `moondream`. Il modello realmente competente per OCR su Ollama (gennaio 2026) è `qwen2.5vl` (anche 3B).
+
+**Mitigazioni applicate:**
+1. System prompt vision riformulato in chiave "OCR + analista visivo" con istruzione esplicita: "Non dire mai 'il documento non è completo' senza prima aver provato a trascrivere ciò che vedi: se una parola è incerta, mettila tra `[parentesi quadre]`"
+2. Quando l'utente allega un'immagine **senza scrivere niente**, il prompt di default chiede esplicitamente una trascrizione parola per parola
+3. **Hint automatico in chat** quando il modello risolto è in `weak_ocr = {"llava", "llava:latest", "llava:7b", "llava:13b", "moondream", "moondream:latest"}`: prima della risposta compare un riquadro che suggerisce `ollama pull qwen2.5vl:3b`
+4. Per i **documenti PDF/DOCX/testo** è stato aggiunto l'endpoint `/extract` che bypassa completamente il modello vision: il testo viene estratto server-side con `pypdf`/`python-docx` e prefisso al prompt del modello testo standard. Questo risolve il caso d'uso più frequente (analizzare un PDF) senza dipendere dall'OCR
+
+**Fix vero da fare:** offrire il pull di `qwen2.5vl:3b` direttamente dall'interfaccia (modal "vuoi installare il modello consigliato? ~3GB") invece di limitarsi a un hint testuale. **Rimandato per mancanza di tempo nel ciclo di sviluppo corrente.**
+
+---
+
+### BUG-010 — Pulsante stop: stream Ollama continua in background
+
+**Stato:** ✅ Risolto
+
+**Sintomo:** Cliccando stop il browser interrompeva la SSE ma Ollama continuava a generare token "nel vuoto" per minuti, occupando CPU/GPU.
+
+**Causa:** Cancellare la `fetch` lato browser provocava un `GeneratorExit` lato Flask al prossimo `yield`, ma il generator chiudeva senza notificare il client HTTP del modello.
+
+**Fix applicato:** `try/except GeneratorExit` in `chat_stream` (sia nel blocco testo che in quello vision) che chiama esplicitamente `stream.close()` sull'oggetto OpenAI prima di re-sollevare l'eccezione per il cleanup. Salva inoltre la risposta parziale in `Memory` col marker `[interrotto]` così la cronologia resta coerente.
+
+---
+
 ## Bug noti / da monitorare
 
 ---
@@ -105,3 +151,47 @@ Storico dei bug risolti e problemi noti del progetto Raxeus.
 **Causa:** `subprocess.run(["python3", ...])` lancia il Python di sistema, non quello del venv.
 
 **Possibile fix futuro:** Usare `sys.executable` invece di `"python3"` per lanciare il Python del venv corrente.
+
+---
+
+### BUG-011 — Chatbox e app desktop crashano su Windows
+
+**Stato:** 🔴 Aperto — blocca l'uso su Windows. Non risolto per mancanza di tempo nel ciclo di sviluppo corrente.
+
+**Sintomo:** Su Windows l'app desktop (bundle generato da `create_app.ps1` o lancio diretto di `python launcher.py`) crasha all'avvio o appena qualcosa va storto. La chatbox tramite browser (`python app.py` + apertura manuale di `http://localhost:5050`) parte ma alcuni endpoint backend chiamano `osascript` e falliscono.
+
+**Causa:** Tutto il codice cross-cutting aggiunto nelle ultime release è scritto per macOS:
+
+| File | Codice macOS-only |
+|---|---|
+| `launcher.py` | `_show_error` usa `osascript -e 'display dialog'` — su Windows il binario non esiste |
+| `launcher.py` | `_find_ollama_binary` cerca solo `/opt/homebrew/bin`, `/usr/local/bin`, `/Applications/Ollama.app/...` |
+| `launcher.py` | `subprocess.Popen(..., start_new_session=True)` — POSIX-only, su Windows va sostituito con `creationflags=DETACHED_PROCESS` |
+| `app.py` | `_send_native_notification` lancia `osascript display notification` |
+| `create_app.sh` | bash + `sips` + `iconutil` — strumenti macOS |
+
+`create_app.ps1` esiste e genera un eseguibile via PyInstaller, ma il `launcher.py` bundlato è lo stesso codice macOS, quindi l'`.exe` crasha appena tenta di mostrare un dialog o cercare Ollama.
+
+**Workaround attuale:** su Windows usare solo la modalità CLI: `python main.py`. Funziona regolarmente.
+
+**Fix da fare (port Windows):**
+- `_show_error`: dispatcher su `platform.system()`; su Windows `Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show(...)` via `powershell -NoProfile -Command`
+- `_find_ollama_binary`: aggiungere `%LOCALAPPDATA%\Programs\Ollama\ollama.exe` e `C:\Program Files\Ollama\ollama.exe`
+- `_start_ollama`: usare `creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS` su Windows
+- `_send_native_notification`: balloon tip via `System.Windows.Forms.NotifyIcon` o toast WinRT (Win10+)
+- Menu pywebview: testare che la callback funzioni anche con il chrome Win32 di pywebview (potrebbe servire Edge WebView2 invece del default)
+- `create_app.ps1`: invariato dal punto di vista dello script, ma da rigenerare dopo il port di `launcher.py`
+
+---
+
+### BUG-012 — Solo 5 chat visibili nella topbar
+
+**Stato:** ⚠️ Noto, comportamento atteso ma limitante
+
+**Sintomo:** Se hai più di 5 sessioni salvate sul disco, l'interfaccia ne mostra solo 5 nella topbar (le più recenti). Le altre restano in `sessions/*.json` ma non sono raggiungibili dalla web UI.
+
+**Causa:** `GET /sessions` ritorna `list_sessions()[:5]` e il limite client-side `MAX_TABS = 5`.
+
+**Workaround:** lanciare `python main.py` e usare `sessioni` + `carica N` per caricare manualmente una sessione vecchia.
+
+**Possibile fix:** menu "Tutte le chat" nella topbar che apre un overlay con la lista completa filtrabile.

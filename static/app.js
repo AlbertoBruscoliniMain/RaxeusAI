@@ -10,12 +10,18 @@ const COLOR_PRESETS = [
 
 const MAX_TABS = 5;
 const MAX_IMAGES = 3;
+const MAX_DOCS = 3;
+const MAX_DOC_BYTES = 10 * 1024 * 1024;
+const DOC_EXT_RE = /\.(pdf|docx|txt|md|csv|json|html?|xml|log|py|js|ts|tsx|jsx|css|scss|yaml|yml|toml|ini|sh|bash|zsh|sql)$/i;
 
 // Stato globale
 let tabs = [];      // [{id, title, color}]
 let activeId = null;
 let isStreaming = false;
 let selectedImages = []; // [{file, dataUrl}]
+let selectedDocs = [];   // [{name, text}] — già estratti via /extract
+let currentAbortController = null;
+let currentSessionStart = 0;  // timestamp ms del send: usato per notifiche
 
 // DOM
 const tabsEl          = document.getElementById('tabs');
@@ -173,6 +179,7 @@ function appendMessage(role, content) {
 
 function renderImagePreviews() {
   imgPreviewStrip.innerHTML = '';
+
   selectedImages.forEach((img, i) => {
     const wrap = document.createElement('div');
     wrap.className = 'img-preview-wrap';
@@ -191,6 +198,31 @@ function renderImagePreviews() {
     wrap.appendChild(rm);
     imgPreviewStrip.appendChild(wrap);
   });
+
+  selectedDocs.forEach((doc, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'doc-preview-wrap';
+    const chip = document.createElement('div');
+    chip.className = 'doc-preview-chip';
+    if (doc.loading) chip.classList.add('loading');
+    chip.innerHTML = `
+      <span class="doc-icon">📄</span>
+      <span class="doc-name" title="${esc(doc.name)}">${esc(doc.name)}</span>
+      <span class="doc-meta">${doc.loading ? 'estrazione…' : (doc.chars + ' caratteri')}</span>
+    `;
+    const rm = document.createElement('button');
+    rm.className = 'img-preview-rm';
+    rm.textContent = '×';
+    rm.addEventListener('click', () => {
+      selectedDocs.splice(i, 1);
+      renderImagePreviews();
+      updateChatBottom();
+    });
+    wrap.appendChild(chip);
+    wrap.appendChild(rm);
+    imgPreviewStrip.appendChild(wrap);
+  });
+
   updateChatBottom();
 }
 
@@ -214,8 +246,46 @@ function addImageFiles(files) {
   });
 }
 
+async function addDocFile(file) {
+  if (selectedDocs.length >= MAX_DOCS) return;
+  if (file.size > MAX_DOC_BYTES) {
+    alert(`"${file.name}" supera 10MB.`);
+    return;
+  }
+  const placeholder = { name: file.name, text: '', chars: 0, loading: true };
+  selectedDocs.push(placeholder);
+  renderImagePreviews();
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/extract', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    placeholder.text = data.text || '';
+    placeholder.chars = placeholder.text.length;
+    placeholder.loading = false;
+  } catch (err) {
+    const idx = selectedDocs.indexOf(placeholder);
+    if (idx >= 0) selectedDocs.splice(idx, 1);
+    alert(`Errore estrazione "${file.name}": ${err.message || err}`);
+  }
+  renderImagePreviews();
+}
+
+function dispatchFiles(files) {
+  const images = [];
+  const docs = [];
+  for (const f of files) {
+    if (f.type.startsWith('image/')) images.push(f);
+    else if (DOC_EXT_RE.test(f.name) || f.type === 'application/pdf') docs.push(f);
+    else docs.push(f);  // tentativo: il backend dirà se non è supportato
+  }
+  if (images.length) addImageFiles(images);
+  for (const d of docs) addDocFile(d);
+}
+
 imgInput.addEventListener('change', () => {
-  addImageFiles(Array.from(imgInput.files));
+  dispatchFiles(Array.from(imgInput.files));
   imgInput.value = '';
 });
 
@@ -225,14 +295,14 @@ document.addEventListener('paste', e => {
   if (!items) return;
   const pasted = [];
   for (const item of items) {
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
+    if (item.kind === 'file') {
       const file = item.getAsFile();
       if (file) pasted.push(file);
     }
   }
   if (pasted.length === 0) return;
   e.preventDefault();
-  addImageFiles(pasted);
+  dispatchFiles(pasted);
 });
 
 function scrollBottom() {
@@ -241,38 +311,81 @@ function scrollBottom() {
 
 // ── INVIO ─────────────────────────────────────────────────────────────────────
 
+function stopStream() {
+  if (!isStreaming || !currentAbortController) return;
+  try { currentAbortController.abort(); } catch {}
+}
+
+function setStreamingUI(streaming) {
+  isStreaming = streaming;
+  if (streaming) {
+    btnSend.disabled = false;
+    btnSend.classList.add('is-stop');
+    btnSend.textContent = 'stop';
+  } else {
+    btnSend.classList.remove('is-stop');
+    btnSend.textContent = 'invia';
+    btnSend.disabled = false;
+  }
+}
+
 async function sendMessage() {
-  if (isStreaming) return;
-  const text = msgInput.value.trim();
+  if (isStreaming) { stopStream(); return; }
+  const userText = msgInput.value.trim();
   const imagesToSend = [...selectedImages];
-  if (!text && imagesToSend.length === 0) return;
+  const docsToSend = selectedDocs.filter(d => !d.loading);
+  if (selectedDocs.some(d => d.loading)) {
+    // estrazione documenti ancora in corso
+    return;
+  }
+  if (!userText && imagesToSend.length === 0 && docsToSend.length === 0) return;
+
+  // Concatena il testo estratto dai documenti al prompt utente.
+  let text = userText;
+  if (docsToSend.length > 0) {
+    const blocks = docsToSend.map(d =>
+      `--- Documento allegato: ${d.name} ---\n${d.text}`
+    ).join('\n\n');
+    text = blocks + (userText ? `\n\n---\n\n${userText}` : '');
+  }
 
   msgInput.value = '';
   msgInput.style.height = 'auto';
   selectedImages = [];
+  selectedDocs = [];
   renderImagePreviews();
 
   const isFirstMessage = loadMessages(activeId).length === 0;
 
-  // Titolo provvisorio al primo messaggio (verrà aggiornato dall'AI dopo la risposta)
+  // Titolo provvisorio: usiamo userText (NON `text`, che può contenere
+  // megabyte di documento estratto) o un placeholder.
   if (isFirstMessage) {
-    const title = text || `[${imagesToSend.length} immagini]`;
+    let title = userText;
+    if (!title && docsToSend.length > 0) title = docsToSend[0].name;
+    if (!title) title = `[${imagesToSend.length} immagini]`;
     tabs = tabs.map(t => t.id === activeId ? { ...t, title: title.slice(0, 30) } : t);
     renderTabs();
   }
 
-  // Salva testo in localStorage (senza le immagini per non saturare lo storage)
-  const storedText = text || (imagesToSend.length > 0
-    ? `[${imagesToSend.length} ${imagesToSend.length === 1 ? 'immagine allegata' : 'immagini allegate'}]`
-    : '');
+  // In localStorage salviamo solo il testo dell'utente + un riassunto degli
+  // allegati: il testo dei documenti può essere enorme e saturare lo storage.
+  const attachTags = [];
+  if (imagesToSend.length > 0) {
+    attachTags.push(`[${imagesToSend.length} ${imagesToSend.length === 1 ? 'immagine' : 'immagini'}]`);
+  }
+  if (docsToSend.length > 0) {
+    attachTags.push(...docsToSend.map(d => `[doc: ${d.name}]`));
+  }
+  const storedText = [userText, attachTags.join(' ')].filter(Boolean).join('\n');
   const msgs = loadMessages(activeId);
   msgs.push({ role: 'user', content: storedText });
   saveMessages(activeId, msgs);
-  buildBubble('user', text, imagesToSend.map(i => i.dataUrl));
+  buildBubble('user', storedText, imagesToSend.map(i => i.dataUrl));
   scrollBottom();
 
-  isStreaming = true;
-  btnSend.disabled = true;
+  setStreamingUI(true);
+  currentAbortController = new AbortController();
+  currentSessionStart = Date.now();
 
   // Spinner temporaneo
   const spinWrap = document.createElement('div');
@@ -288,77 +401,120 @@ async function sendMessage() {
 
   let aiContent = '';
   let aiBubble = null;
+  let aborted = false;
 
-  const res = await fetch('/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message: text,
-      session_id: activeId,
-      images: imagesToSend.map(i => i.dataUrl),
-    }),
-  });
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        session_id: activeId,
+        images: imagesToSend.map(i => i.dataUrl),
+      }),
+      signal: currentAbortController.signal,
+    });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      let evt;
-      try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch { continue; }
 
-      if (evt.type === 'token') {
-        if (!aiBubble) {
-          spinWrap.remove();
-          const wrap = document.createElement('div');
-          wrap.className = 'msg assistant';
-          const av = document.createElement('img');
-          av.className = 'avatar';
-          av.src = '/static/logo.png';
-          av.alt = 'Raxeus';
-          aiBubble = document.createElement('div');
-          aiBubble.className = 'bubble-ai';
-          wrap.appendChild(av);
-          wrap.appendChild(aiBubble);
-          chatEl.appendChild(wrap);
-        }
-        aiContent += evt.content;
-        aiBubble.innerHTML = marked.parse(aiContent);
-        renderMath(aiBubble);
-        scrollBottom();
-      } else if (evt.type === 'done') {
-        if (aiBubble) {
-          const msgs = loadMessages(activeId);
-          msgs.push({ role: 'assistant', content: aiContent });
-          saveMessages(activeId, msgs);
-        }
-        if (isFirstMessage && text) {
-          const sessionId = activeId;
-          fetch('/title', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ first_message: text }),
-          }).then(r => r.json()).then(d => {
-            if (d.title) {
-              tabs = tabs.map(t => t.id === sessionId ? { ...t, title: d.title } : t);
-              renderTabs();
-            }
-          }).catch(() => {});
+        if (evt.type === 'token') {
+          if (!aiBubble) {
+            spinWrap.remove();
+            const wrap = document.createElement('div');
+            wrap.className = 'msg assistant';
+            const av = document.createElement('img');
+            av.className = 'avatar';
+            av.src = '/static/logo.png';
+            av.alt = 'Raxeus';
+            aiBubble = document.createElement('div');
+            aiBubble.className = 'bubble-ai';
+            wrap.appendChild(av);
+            wrap.appendChild(aiBubble);
+            chatEl.appendChild(wrap);
+          }
+          aiContent += evt.content;
+          aiBubble.innerHTML = marked.parse(aiContent);
+          renderMath(aiBubble);
+          scrollBottom();
+        } else if (evt.type === 'done') {
+          if (aiBubble) {
+            const msgs = loadMessages(activeId);
+            msgs.push({ role: 'assistant', content: aiContent });
+            saveMessages(activeId, msgs);
+          }
+          maybeNotify(aiContent);
+          if (isFirstMessage && text) {
+            const sessionId = activeId;
+            fetch('/title', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ first_message: text }),
+            }).then(r => r.json()).then(d => {
+              if (d.title) {
+                tabs = tabs.map(t => t.id === sessionId ? { ...t, title: d.title } : t);
+                renderTabs();
+              }
+            }).catch(() => {});
+          }
         }
       }
     }
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      aborted = true;
+    } else {
+      console.error('chat stream error:', err);
+    }
   }
 
-  isStreaming = false;
-  btnSend.disabled = false;
+  if (aborted) {
+    spinWrap.remove();
+    if (aiBubble) {
+      aiContent += '\n\n_[interrotto]_';
+      aiBubble.innerHTML = marked.parse(aiContent);
+      renderMath(aiBubble);
+      const msgs = loadMessages(activeId);
+      msgs.push({ role: 'assistant', content: aiContent });
+      saveMessages(activeId, msgs);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.className = 'msg assistant';
+      wrap.innerHTML = `<img class="avatar" src="/static/logo.png" alt="Raxeus"><div class="bubble-ai"><em>[interrotto prima della risposta]</em></div>`;
+      chatEl.appendChild(wrap);
+    }
+  }
+
+  currentAbortController = null;
+  setStreamingUI(false);
+}
+
+function maybeNotify(content) {
+  // Notifica solo se la finestra non è in primo piano e la risposta è "consistente"
+  if (typeof document === 'undefined') return;
+  if (document.visibilityState === 'visible' && document.hasFocus()) return;
+  const elapsed = Date.now() - currentSessionStart;
+  if (elapsed < 4000) return;   // risposta troppo rapida, non disturbare
+  const preview = (content || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  if (!preview) return;
+  fetch('/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Raxeus ha risposto', message: preview }),
+  }).catch(() => {});
 }
 
 // ── COLORE BOLLA ──────────────────────────────────────────────────────────────

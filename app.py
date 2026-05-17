@@ -3,14 +3,17 @@ import uuid
 import os
 import glob
 import mimetypes
+import subprocess
 import threading
 import queue as _queue
 import urllib.parse
 import urllib.request
 from flask import Flask, request, Response, render_template, jsonify, send_file, stream_with_context
+import tempfile
 from memory import Memory
 from agent import chat_stream, generate_title
 from sessions import save_session, list_sessions, load_session
+from tools import _read_pdf, _read_docx, _read_plain, _TEXT_EXTS
 from lyric_downloader import download_audio
 from lyric_transcriber import get_transcription
 from lyric_formatter import save_as_lrc, update_playlist, check_cache, check_cache_with_entry, get_playlist_entry, safe_title
@@ -77,6 +80,87 @@ def get_title():
         return jsonify({"title": "Nuova chat"})
     title = generate_title(first_message)
     return jsonify({"title": title})
+
+
+def _send_native_notification(title: str, message: str) -> bool:
+    """Notifica desktop nativa macOS via osascript. Nessuna dipendenza esterna."""
+    title = title[:80]
+    message = message[:400]
+    try:
+        t = title.replace("\\", "\\\\").replace('"', '\\"')
+        m = message.replace("\\", "\\\\").replace('"', '\\"')
+        script = f'display notification "{m}" with title "{t}"'
+        subprocess.Popen(["osascript", "-e", script],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
+_ALLOWED_DOC_EXTS = {".pdf", ".docx"} | _TEXT_EXTS
+_MAX_DOC_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@app.route("/extract", methods=["POST"])
+def extract_document():
+    """Riceve un file (pdf/docx/testo) e restituisce il testo estratto.
+    Frontend lo usa per allegare documenti alla chat senza passare per il
+    modello vision (che è bravo solo con immagini)."""
+    if "file" not in request.files:
+        return jsonify({"error": "Nessun file allegato"}), 400
+    f = request.files["file"]
+    name = f.filename or "documento"
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in _ALLOWED_DOC_EXTS:
+        return jsonify({"error": f"Estensione non supportata: {ext or '(nessuna)'}"}), 400
+
+    # Scriviamo in un tempfile per riusare le funzioni esistenti, che leggono
+    # da path. Cancelliamo subito dopo l'estrazione (anche in caso di errore).
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+    try:
+        size = 0
+        while True:
+            chunk = f.stream.read(64 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > _MAX_DOC_BYTES:
+                tmp.close()
+                os.unlink(tmp.name)
+                return jsonify({"error": "File troppo grande (max 10MB)"}), 413
+            tmp.write(chunk)
+        tmp.close()
+
+        if ext == ".pdf":
+            text = _read_pdf(tmp.name)
+        elif ext == ".docx":
+            text = _read_docx(tmp.name)
+        else:
+            text = _read_plain(tmp.name)
+    except Exception as e:
+        return jsonify({"error": f"Errore estrazione: {e}"}), 500
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+    return jsonify({"name": name, "text": text})
+
+
+@app.route("/notify", methods=["POST"])
+def notify():
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "RaxeusAI").strip()
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "reason": "empty"}), 400
+    threading.Thread(
+        target=_send_native_notification,
+        args=(title, message),
+        daemon=True,
+    ).start()
+    return jsonify({"ok": True})
 
 
 @app.route("/session/<session_id>", methods=["DELETE"])
@@ -370,4 +454,7 @@ def lyric_cover(filename):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, threaded=True)
+    # Porta 5000 su macOS è occupata da AirPlay Receiver (restituisce 403),
+    # quindi usiamo 5050 di default. Override con env PORT.
+    port = int(os.environ.get("PORT", "5050"))
+    app.run(host="127.0.0.1", port=port, debug=True, threaded=True)

@@ -4,36 +4,68 @@ import io
 import os
 from datetime import datetime
 
-try:
-    from ddgs import DDGS
-    _DDGS_OK = True
-except ImportError:
-    _DDGS_OK = False
+# Tutti gli import "pesanti" (chromadb, requests/bs4, pypdf, python-docx,
+# ddgs, googlesearch) sono *lazy*: vengono caricati alla prima chiamata della
+# tool corrispondente. Questo riduce il cold-start dell'app desktop di ~400ms.
+# Il pattern: una funzione `_lazy_*()` che restituisce il modulo o None,
+# memoizzando il risultato e l'esito (OK / non installato).
 
-try:
-    from googlesearch import search as gsearch
-    _GOOGLE_OK = True
-except ImportError:
-    _GOOGLE_OK = False
+_LAZY_CACHE: dict[str, object] = {}
 
-try:
-    import requests
-    from bs4 import BeautifulSoup
-    _REQUESTS_OK = True
-except ImportError:
-    _REQUESTS_OK = False
 
-try:
-    from pypdf import PdfReader
-    _PYPDF_OK = True
-except ImportError:
-    _PYPDF_OK = False
+def _lazy(name: str, importer):
+    if name in _LAZY_CACHE:
+        return _LAZY_CACHE[name]
+    try:
+        mod = importer()
+    except ImportError:
+        mod = None
+    _LAZY_CACHE[name] = mod
+    return mod
 
-try:
-    from docx import Document as _DocxDocument
-    _DOCX_OK = True
-except ImportError:
-    _DOCX_OK = False
+
+def _lazy_ddgs():
+    def _imp():
+        from ddgs import DDGS
+        return DDGS
+    return _lazy("ddgs", _imp)
+
+
+def _lazy_gsearch():
+    def _imp():
+        from googlesearch import search as gsearch
+        return gsearch
+    return _lazy("gsearch", _imp)
+
+
+def _lazy_requests():
+    def _imp():
+        import requests
+        from bs4 import BeautifulSoup
+        return (requests, BeautifulSoup)
+    return _lazy("requests", _imp)
+
+
+def _lazy_pypdf():
+    def _imp():
+        from pypdf import PdfReader
+        return PdfReader
+    return _lazy("pypdf", _imp)
+
+
+def _lazy_docx():
+    def _imp():
+        from docx import Document as _DocxDocument
+        return _DocxDocument
+    return _lazy("docx", _imp)
+
+
+def _lazy_chromadb():
+    def _imp():
+        import chromadb
+        from config import RAG_DB_PATH
+        return (chromadb, RAG_DB_PATH)
+    return _lazy("chromadb", _imp)
 
 _MAX_READ_CHARS = 8000
 _TEXT_EXTS = {
@@ -55,10 +87,11 @@ def _truncate(text: str) -> str:
 
 
 def _read_docx(path: str) -> str:
-    if not _DOCX_OK:
+    DocxDocument = _lazy_docx()
+    if DocxDocument is None:
         return "Errore: libreria python-docx non installata."
     try:
-        doc = _DocxDocument(path)
+        doc = DocxDocument(path)
         parts = [p.text for p in doc.paragraphs if p.text.strip()]
         for tbl in doc.tables:
             for row in tbl.rows:
@@ -71,7 +104,8 @@ def _read_docx(path: str) -> str:
 
 
 def _read_pdf(path: str) -> str:
-    if not _PYPDF_OK:
+    PdfReader = _lazy_pypdf()
+    if PdfReader is None:
         return "Errore: libreria pypdf non installata."
     try:
         reader = PdfReader(path)
@@ -91,16 +125,9 @@ def _read_plain(path: str) -> str:
     except Exception as e:
         return f"Errore: {e}"
 
-try:
-    import chromadb
-    from config import RAG_DB_PATH
-    _CHROMA_OK = True
-except ImportError:
-    _CHROMA_OK = False
-
-
 def web_search(query: str) -> str:
-    if not _DDGS_OK:
+    DDGS = _lazy_ddgs()
+    if DDGS is None:
         return "Errore: libreria ddgs non installata."
     try:
         _old_stderr = sys.stderr
@@ -156,31 +183,57 @@ def run_python(code: str) -> str:
         return f"Errore: {e}"
 
 
-def google_search(query: str) -> str:
-    if not _GOOGLE_OK:
-        return web_search(query)
+def _ddgs_urls(query: str, max_results: int = 5) -> list[str]:
+    DDGS = _lazy_ddgs()
+    if DDGS is None:
+        return []
     try:
         _old_stderr = sys.stderr
         sys.stderr = io.StringIO()
         try:
-            urls = list(gsearch(query, num_results=5, lang="it"))
+            with DDGS() as ddgs:
+                rs = list(ddgs.text(query, max_results=max_results))
         finally:
             sys.stderr = _old_stderr
-        if not urls:
-            return web_search(query)
-        from concurrent.futures import ThreadPoolExecutor
-        targets = urls[:2]
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            fetched = list(ex.map(fetch_url, targets))
-        results = [f"[{url}]\n{content}" for url, content in zip(targets, fetched)]
-        return "\n\n---\n\n".join(results)
+        return [r["href"] for r in rs if r.get("href")]
     except Exception:
+        return []
+
+
+def google_search(query: str) -> str:
+    # Strategia: prima proviamo Google (libreria googlesearch-python). Quando
+    # Google blocca il bot (succede spesso, restituisce 0 URL) facciamo
+    # fallback ai risultati DuckDuckGo, mantenendo comunque il comportamento
+    # "deep fetch" — scarichiamo il contenuto dei primi 2 link in parallelo.
+    urls: list[str] = []
+    gsearch = _lazy_gsearch()
+    if gsearch is not None:
+        try:
+            _old_stderr = sys.stderr
+            sys.stderr = io.StringIO()
+            try:
+                urls = list(gsearch(query, num_results=5, lang="it"))
+            finally:
+                sys.stderr = _old_stderr
+        except Exception:
+            urls = []
+    if not urls:
+        urls = _ddgs_urls(query, max_results=5)
+    if not urls:
         return web_search(query)
+    from concurrent.futures import ThreadPoolExecutor
+    targets = urls[:2]
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fetched = list(ex.map(fetch_url, targets))
+    results = [f"[{url}]\n{content}" for url, content in zip(targets, fetched)]
+    return "\n\n---\n\n".join(results)
 
 
 def fetch_url(url: str) -> str:
-    if not _REQUESTS_OK:
+    pkg = _lazy_requests()
+    if pkg is None:
         return "Errore: librerie requests/beautifulsoup4 non installate."
+    requests, BeautifulSoup = pkg
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=8)
@@ -225,8 +278,10 @@ def read_pdf(path: str) -> str:
 
 
 def rag_search(query: str, n_results: int = 4) -> str:
-    if not _CHROMA_OK:
+    pkg = _lazy_chromadb()
+    if pkg is None:
         return "Errore: chromadb non installato. Esegui: pip install chromadb"
+    chromadb, RAG_DB_PATH = pkg
     try:
         client = chromadb.PersistentClient(path=RAG_DB_PATH)
         try:
@@ -248,13 +303,23 @@ def rag_search(query: str, n_results: int = 4) -> str:
 
 
 def wikipedia_search(query: str, lang: str = "it") -> str:
-    if not _REQUESTS_OK:
+    pkg = _lazy_requests()
+    if pkg is None:
         return "Errore: libreria requests non installata."
+    requests, _ = pkg
+    # Wikipedia REST richiede uno User-Agent identificativo (policy 2024+),
+    # altrimenti risponde 403.
+    headers = {
+        "User-Agent": "RaxeusAI/1.0 (https://github.com/AlbertoBruscoliniMain/RaxeusAI)",
+        "Accept": "application/json",
+    }
     try:
         url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{query.replace(' ', '_')}"
-        resp = requests.get(url, timeout=8)
+        resp = requests.get(url, headers=headers, timeout=8)
         if resp.status_code == 404:
             return f"Nessuna pagina Wikipedia trovata per: {query}"
+        if resp.status_code != 200:
+            return f"Errore Wikipedia: HTTP {resp.status_code}"
         data = resp.json()
         title = data.get("title", "")
         extract = data.get("extract", "Nessun contenuto disponibile.")
